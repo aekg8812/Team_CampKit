@@ -4,6 +4,7 @@
 // ========================================
 
 import { supabase } from "../lib/supabase";
+import { LEVEL_UP_THRESHOLD } from "../data/levelProbability";
 
 function toEmail(username) {
   return `${username}@sabori-app.local`;
@@ -12,28 +13,50 @@ function toEmail(username) {
 function freshData() {
   return {
     selectedHabits: [],
-    habitStreaks: {},
+    habitStreaks: {},     // { [habitId]: { currentStreak, best, level, totalFail } }
     successCount: 0,
     failCount: 0,
     history: [],
     notifyEmail: null,
     lastLoginAt: null,
+    lastLogAt: null,
     emailLog: [],
+    points: 0,
+    dailyPointsDate: null,
+    dailyPointsAwarded: 0,
+    lastOmikujiDate: null,
+  };
+}
+
+// habitStreak を初期化・マイグレーションする（旧 current → currentStreak）
+function normalizeStreak(s) {
+  if (!s) return { currentStreak: 0, best: 0, level: 1, totalFail: 0 };
+  return {
+    currentStreak: s.currentStreak ?? s.current ?? 0,
+    best: s.best ?? 0,
+    level: s.level ?? 1,
+    totalFail: s.totalFail ?? 0,
   };
 }
 
 // DBの行(snake_case) → アプリ用オブジェクト(camelCase)
 function rowToData(row) {
   if (!row) return freshData();
+  const base = freshData();
   return {
-    selectedHabits: row.selected_habits || [],
-    habitStreaks: row.habit_streaks || {},
-    successCount: row.success_count || 0,
-    failCount: row.fail_count || 0,
-    history: row.history || [],
-    notifyEmail: row.notify_email || null,
-    lastLoginAt: row.last_login_at || null,
-    emailLog: row.email_log || [],
+    selectedHabits:    row.selected_habits    ?? base.selectedHabits,
+    habitStreaks:      row.habit_streaks       ?? base.habitStreaks,
+    successCount:      row.success_count       ?? base.successCount,
+    failCount:         row.fail_count          ?? base.failCount,
+    history:           row.history             ?? base.history,
+    notifyEmail:       row.notify_email        ?? base.notifyEmail,
+    lastLoginAt:       row.last_login_at       ?? base.lastLoginAt,
+    lastLogAt:         row.last_log_at         ?? base.lastLogAt,
+    emailLog:          row.email_log           ?? base.emailLog,
+    points:            row.points              ?? base.points,
+    dailyPointsDate:   row.daily_points_date   ?? base.dailyPointsDate,
+    dailyPointsAwarded:row.daily_points_awarded?? base.dailyPointsAwarded,
+    lastOmikujiDate:   row.last_omikuji_date   ?? base.lastOmikujiDate,
   };
 }
 
@@ -57,6 +80,10 @@ export async function registerSb(username, password, notifyEmail) {
       history: [],
       notify_email: notifyEmail || null,
       email_log: [],
+      points: 0,
+      daily_points_date: null,
+      daily_points_awarded: 0,
+      last_omikuji_date: null,
     });
   }
   return { ok: true };
@@ -113,7 +140,9 @@ export async function saveSelectedHabitsSb(habitIds) {
   current.selectedHabits = habitIds;
   habitIds.forEach((id) => {
     if (!current.habitStreaks[id]) {
-      current.habitStreaks[id] = { current: 0, best: 0, level: 1 };
+      current.habitStreaks[id] = { currentStreak: 0, best: 0, level: 1, totalFail: 0 };
+    } else {
+      current.habitStreaks[id] = normalizeStreak(current.habitStreaks[id]);
     }
   });
 
@@ -137,6 +166,7 @@ export async function recordResultSb({ habitId, taskText, result, comment, image
 
   const data = await getUserDataSb();
   const today = new Date().toISOString().slice(0, 10);
+
   data.history.unshift({
     date: today,
     habitId,
@@ -148,18 +178,39 @@ export async function recordResultSb({ habitId, taskText, result, comment, image
   });
 
   if (!data.habitStreaks[habitId]) {
-    data.habitStreaks[habitId] = { current: 0, best: 0, level: 1 };
+    data.habitStreaks[habitId] = { currentStreak: 0, best: 0, level: 1, totalFail: 0 };
   }
-  const s = data.habitStreaks[habitId];
+  const s = normalizeStreak(data.habitStreaks[habitId]);
+
   if (result === "success") {
     data.successCount += 1;
-    s.current += 1;
-    if (s.current > s.best) s.best = s.current;
-    s.level = Math.min(3, s.level + 1);
+    s.currentStreak += 1;
+    if (s.currentStreak > s.best) s.best = s.currentStreak;
+    const threshold = LEVEL_UP_THRESHOLD[s.level];
+    if (threshold && s.currentStreak >= threshold && s.level < 3) {
+      s.level += 1;
+      s.currentStreak = 0;
+    }
+
+    // ポイント付与：1日3pt上限（おみくじ報酬は別枠）
+    if (data.dailyPointsDate !== today) {
+      data.dailyPointsDate = today;
+      data.dailyPointsAwarded = 0;
+    }
+    if (data.dailyPointsAwarded < 3) {
+      data.points = (data.points || 0) + 1;
+      data.dailyPointsAwarded += 1;
+    }
   } else {
     data.failCount += 1;
-    s.current = 0;
+    s.totalFail += 1;
+    s.currentStreak = 0;
+    s.level = 1;
   }
+
+  data.habitStreaks[habitId] = s;
+  const nowIso = new Date().toISOString();
+  data.lastLogAt = nowIso;
 
   await supabase.from("user_data").upsert({
     id: uid,
@@ -168,7 +219,11 @@ export async function recordResultSb({ habitId, taskText, result, comment, image
     success_count: data.successCount,
     fail_count: data.failCount,
     history: data.history,
-    updated_at: new Date().toISOString(),
+    points: data.points,
+    daily_points_date: data.dailyPointsDate,
+    daily_points_awarded: data.dailyPointsAwarded,
+    last_log_at: nowIso,
+    updated_at: nowIso,
   });
 
   return data;
@@ -194,6 +249,38 @@ export async function addEmailLogSb(entry) {
     .from("user_data")
     .update({ email_log: emailLog, updated_at: new Date().toISOString() })
     .eq("id", uid);
+}
+
+// ポイントを消費する
+export async function spendPointsSb(amount) {
+  const uid = await getCurrentUidSb();
+  if (!uid) return;
+  const data = await getUserDataSb();
+  data.points = Math.max(0, (data.points || 0) - amount);
+  await supabase
+    .from("user_data")
+    .update({ points: data.points, updated_at: new Date().toISOString() })
+    .eq("id", uid);
+  return data;
+}
+
+// おみくじ結果を記録し、ポイントを加算する（1日上限の対象外）
+export async function recordOmikujiSb(points) {
+  const uid = await getCurrentUidSb();
+  if (!uid) return;
+  const data = await getUserDataSb();
+  const today = new Date().toISOString().slice(0, 10);
+  data.points = (data.points || 0) + points;
+  data.lastOmikujiDate = today;
+  await supabase
+    .from("user_data")
+    .update({
+      points: data.points,
+      last_omikuji_date: today,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", uid);
+  return data;
 }
 
 function sbError(error) {

@@ -1,39 +1,67 @@
 import { useEffect, useRef, useState } from "react";
-import { LEVEL_LABEL } from "../data/tasksByHabit";
+import { LEVEL_LABEL, getTasksForHabit } from "../data/tasksByHabit";
 import { getPenaltySeconds } from "../data/penaltyTime";
+import { REGACHA_OPTIONS, RESCUE_COST } from "../data/levelProbability";
 import { judgeEvidence } from "../lib/claude";
 
-// 課題提示 + カウントダウン + 証拠提出（画像/コメント）
+// 課題提示 + カウントダウン + 証拠提出（画像/コメント）+ 再ガチャ/救済
 // props:
-//   task       : { id, text, level, penaltyLevel }
-//   onSuccess  : ({ comment, withEvidence, imageDataUrl, durationSec })
-//   onFail     : ({ durationSec })
-export default function TaskScreen({ task, onSuccess, onFail }) {
+//   task         : { id, text, level, penaltyLevel, isUltra? }
+//   habitId      : string  (再ガチャ時に新課題を選ぶために必要)
+//   points       : number  (現在の保有ポイント)
+//   onSuccess    : ({ comment, withEvidence, imageDataUrl, durationSec, rescued? })
+//   onFail       : ({ durationSec })
+//   onSpendPoints: async (amount) => void
+export default function TaskScreen({ task: initialTask, habitId, points: initialPoints, onSuccess, onFail, onSpendPoints }) {
+  const [task, setTask] = useState(initialTask);
+  const [localPoints, setLocalPoints] = useState(initialPoints || 0);
   const penaltySeconds = getPenaltySeconds(task.penaltyLevel);
   const [remaining, setRemaining] = useState(penaltySeconds);
   const [comment, setComment] = useState("");
   const [imageData, setImageData] = useState(null); // { base64, mediaType, preview }
   const [judging, setJudging] = useState(false);
   const [judgeMsg, setJudgeMsg] = useState("");
+  const [showOptions, setShowOptions] = useState(false);
 
   const startTimeRef = useRef(Date.now());
-  const style = LEVEL_LABEL[task.level];
+  const timerRef = useRef(null);
+  const style = task.isUltra
+    ? { label: "【激重】", color: "#ff2222", note: "覚悟しろ！！！" }
+    : LEVEL_LABEL[task.level] || LEVEL_LABEL[1];
 
   // カウントダウン（課題提示からの経過時間）
   useEffect(() => {
     let secs = penaltySeconds;
-    const timer = setInterval(() => {
+    timerRef.current = setInterval(() => {
       secs -= 1;
       setRemaining(Math.max(0, secs));
       if (secs <= 0) {
-        clearInterval(timer);
+        clearInterval(timerRef.current);
         const durationSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
         onFail({ durationSec });
       }
     }, 1000);
-    return () => clearInterval(timer);
+    return () => clearInterval(timerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 課題が変わったらタイマーをリセット
+  function resetTimerForNewTask(newTask) {
+    clearInterval(timerRef.current);
+    const newSecs = getPenaltySeconds(newTask.penaltyLevel);
+    setRemaining(newSecs);
+    startTimeRef.current = Date.now();
+    let secs = newSecs;
+    timerRef.current = setInterval(() => {
+      secs -= 1;
+      setRemaining(Math.max(0, secs));
+      if (secs <= 0) {
+        clearInterval(timerRef.current);
+        const durationSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        onFail({ durationSec });
+      }
+    }, 1000);
+  }
 
   // 画像選択
   function handleImage(e) {
@@ -56,7 +84,6 @@ export default function TaskScreen({ task, onSuccess, onFail }) {
     const durationSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
 
     if (imageData) {
-      // 画像をサムネイルにリサイズしてから判定・保存
       const thumbnail = await resizeImage(imageData.base64, imageData.mediaType, 480);
       const r = await judgeEvidence({
         base64: thumbnail.split(",")[1],
@@ -80,17 +107,56 @@ export default function TaskScreen({ task, onSuccess, onFail }) {
     onSuccess({ comment, withEvidence: false, imageDataUrl: null, durationSec });
   }
 
+  // ポイント消費で再ガチャ（確率でLv1へ引き下げ）
+  async function handleReGacha(option) {
+    if (localPoints < option.cost) return;
+    setShowOptions(false);
+    // ポイントを先に消費
+    setLocalPoints((p) => p - option.cost);
+    await onSpendPoints?.(option.cost);
+
+    if (Math.random() < option.prob) {
+      // 課題レベルをLv1へ下げて引き直し
+      const pool = getTasksForHabit(habitId, 1);
+      const newTask = pool[Math.floor(Math.random() * pool.length)];
+      setTask(newTask);
+      setImageData(null);
+      setComment("");
+      setJudgeMsg(`ラッキー！課題がLv1に変わりました`);
+      resetTimerForNewTask(newTask);
+    } else {
+      setJudgeMsg(`惜しかった…課題は変わりませんでした（${option.cost}pt消費）`);
+    }
+  }
+
+  // 50pt消費で成功扱い救済
+  async function handleRescue() {
+    if (localPoints < RESCUE_COST) return;
+    setLocalPoints((p) => p - RESCUE_COST);
+    await onSpendPoints?.(RESCUE_COST);
+    clearInterval(timerRef.current);
+    const durationSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
+    onSuccess({ comment: "【救済】", withEvidence: false, imageDataUrl: null, durationSec, rescued: true });
+  }
+
   return (
     <div className="court-frame flex flex-col items-center gap-5 py-6">
-      <p className="text-sm text-gray-400">今日の課題</p>
+      <div className="flex w-full justify-between items-center">
+        <p className="text-sm text-gray-400">今日の課題</p>
+        <p className="text-xs text-court-gold font-bold">{localPoints}pt</p>
+      </div>
+
       <div
-        className="w-full py-6 px-4 rounded-xl border-2 text-center"
-        style={{ borderColor: style.color }}
+        className={`w-full py-6 px-4 rounded-xl border-2 text-center ${task.isUltra ? "animate-pulse" : ""}`}
+        style={{ borderColor: style.color, boxShadow: task.isUltra ? `0 0 24px ${style.color}88` : undefined }}
       >
-        <p className="text-xs mb-2" style={{ color: style.color }}>
+        <p className="text-xs mb-2 font-bold" style={{ color: style.color }}>
           {style.label}
         </p>
         <p className="text-2xl font-extrabold">{task.text}</p>
+        {task.isUltra && (
+          <p className="text-xs text-red-400 mt-2 font-bold">⚠️ 激重課題が出た！覚悟を決めろ！</p>
+        )}
       </div>
 
       <p className="text-4xl font-mono tracking-wider">{formatTime(remaining)}</p>
@@ -102,15 +168,8 @@ export default function TaskScreen({ task, onSuccess, onFail }) {
 
         {imageData ? (
           <div className="flex flex-col items-center gap-2">
-            <img
-              src={imageData.preview}
-              alt="証拠"
-              className="max-h-40 rounded-lg object-contain"
-            />
-            <button
-              onClick={() => setImageData(null)}
-              className="text-xs text-gray-400 underline"
-            >
+            <img src={imageData.preview} alt="証拠" className="max-h-40 rounded-lg object-contain" />
+            <button onClick={() => setImageData(null)} className="text-xs text-gray-400 underline">
               画像を取り消す
             </button>
           </div>
@@ -145,6 +204,49 @@ export default function TaskScreen({ task, onSuccess, onFail }) {
       >
         {judging ? "確認中…" : "完了する"}
       </button>
+
+      {/* ポイント消費オプション */}
+      <div className="w-full">
+        <button
+          onClick={() => setShowOptions((v) => !v)}
+          className="w-full text-xs text-gray-500 underline py-1"
+        >
+          {showOptions ? "オプションを閉じる" : "ポイントを使う（再ガチャ / 救済）"}
+        </button>
+
+        {showOptions && (
+          <div className="bg-court-panel rounded-xl p-4 flex flex-col gap-3 mt-2">
+            <p className="text-xs text-gray-400">現在 {localPoints}pt 保有</p>
+
+            <p className="text-xs font-bold text-gray-300">再ガチャ（確率でLv1に変更）</p>
+            {REGACHA_OPTIONS.map((opt) => (
+              <button
+                key={opt.cost}
+                onClick={() => handleReGacha(opt)}
+                disabled={localPoints < opt.cost}
+                className="px-4 py-2 bg-court-bg border border-gray-600 rounded-lg text-xs text-left disabled:opacity-40"
+              >
+                {opt.label}
+              </button>
+            ))}
+
+            <div className="border-t border-gray-700 pt-3">
+              <p className="text-xs font-bold text-gray-300 mb-2">救済（{RESCUE_COST}pt — 成功扱い）</p>
+              <p className="text-xs text-gray-500 mb-2">
+                課題を履歴に「???」として登録し、成功扱いにします。
+                連続成功カウントに含まれます。
+              </p>
+              <button
+                onClick={handleRescue}
+                disabled={localPoints < RESCUE_COST}
+                className="w-full px-4 py-2 bg-court-mid text-white rounded-lg text-xs font-bold disabled:opacity-40"
+              >
+                {RESCUE_COST}ptで救済する
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

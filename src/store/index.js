@@ -73,4 +73,16 @@ export async function addEmailLog(entry) {
   return L.addEmailLogLocal(currentUsername, entry);
 }
 
+// ポイントを消費する（残高不足時は 0 で止まる）
+export async function spendPoints(amount) {
+  if (USE_SB) return await S.spendPointsSb(amount);
+  return L.spendPointsLocal(currentUsername, amount);
+}
+
+// おみくじ結果を記録し、ポイントを加算する（1日3pt上限の対象外）
+export async function recordOmikuji(points) {
+  if (USE_SB) return await S.recordOmikujiSb(points);
+  return L.recordOmikujiLocal(currentUsername, points);
+}
+
 export const isSupabaseMode = USE_SB;

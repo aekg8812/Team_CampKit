@@ -48,8 +48,10 @@ function PieChart({ success, fail }) {
   );
 }
 
-export default function MyPageScreen({ username, data, onStart, onEditHabits, onLogout, onViewLog }) {
-  const { successCount, failCount, habitStreaks, selectedHabits, history } = data;
+export default function MyPageScreen({ username, data, onStart, onEditHabits, onLogout, onViewLog, onOmikuji }) {
+  const { successCount, failCount, habitStreaks, selectedHabits, history, points = 0 } = data;
+  const today = new Date().toISOString().slice(0, 10);
+  const canOmikuji = data.lastOmikujiDate !== today;
 
   return (
     <div className="court-frame flex flex-col gap-5 py-6">
@@ -64,6 +66,27 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
         {isSupabaseMode && <span className="ml-2 text-court-gold">[クラウド保存中]</span>}
       </p>
 
+      {/* 保有ポイント */}
+      <div className="bg-court-panel rounded-xl p-4 flex items-center justify-between">
+        <div>
+          <p className="text-xs text-gray-400 mb-1">保有ポイント</p>
+          <p className="text-3xl font-extrabold text-court-gold">
+            {points}<span className="text-base font-bold ml-1">pt</span>
+          </p>
+        </div>
+        <button
+          onClick={onOmikuji}
+          disabled={!canOmikuji}
+          className={`px-4 py-3 rounded-xl text-sm font-bold transition ${
+            canOmikuji
+              ? "bg-court-gold text-court-bg"
+              : "bg-gray-700 text-gray-500 cursor-not-allowed"
+          }`}
+        >
+          {canOmikuji ? "🎋 おみくじを引く" : "おみくじ\n明日また引けます"}
+        </button>
+      </div>
+
       <div className="bg-court-panel rounded-xl p-4">
         <p className="text-sm font-bold mb-1">総合成績</p>
         <PieChart success={successCount} fail={failCount} />
@@ -77,13 +100,17 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
           )}
           {selectedHabits.map((id) => {
             const h = getHabit(id);
-            const s = habitStreaks[id] || { current: 0, best: 0, level: 1 };
+            const raw = habitStreaks[id] || {};
+            // 旧データ互換（current → currentStreak）
+            const streak = raw.currentStreak ?? raw.current ?? 0;
+            const best   = raw.best ?? 0;
+            const level  = raw.level ?? 1;
             return (
               <div key={id} className="flex items-center justify-between text-sm">
                 <span>{h.icon} {h.label}</span>
                 <span className="text-court-gold">
-                  連続{s.current}日
-                  <span className="text-gray-500 text-xs ml-2">最高{s.best}日 / Lv{s.level}</span>
+                  連続{streak}回
+                  <span className="text-gray-500 text-xs ml-2">最高{best}回 / Lv{level}</span>
                 </span>
               </div>
             );

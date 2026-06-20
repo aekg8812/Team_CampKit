@@ -4,6 +4,8 @@
 // ⚠️ パスワードは簡易ハッシュのみ。デモ用。
 // ========================================
 
+import { LEVEL_UP_THRESHOLD } from "../data/levelProbability";
+
 const USERS_KEY = "sabori_users"; // { username: { passHash, data } }
 const SESSION_KEY = "sabori_session";
 
@@ -30,13 +32,29 @@ function saveUsers(users) {
 function freshData() {
   return {
     selectedHabits: [],
-    habitStreaks: {},
+    habitStreaks: {},     // { [habitId]: { currentStreak, best, level, totalFail } }
     successCount: 0,
     failCount: 0,
     history: [],
     notifyEmail: null,
     lastLoginAt: null,
+    lastLogAt: null,       // 最終ログ記録日時（課題成功/失敗を記録するたびに更新）
     emailLog: [],
+    points: 0,             // 保有ポイント
+    dailyPointsDate: null, // 今日のポイント付与基準日（YYYY-MM-DD）
+    dailyPointsAwarded: 0, // 今日付与済みポイント数（上限3pt/日）
+    lastOmikujiDate: null, // おみくじを最後に引いた日（YYYY-MM-DD）
+  };
+}
+
+// habitStreak を初期化・マイグレーションする（旧 current → currentStreak）
+function normalizeStreak(s) {
+  if (!s) return { currentStreak: 0, best: 0, level: 1, totalFail: 0 };
+  return {
+    currentStreak: s.currentStreak ?? s.current ?? 0,
+    best: s.best ?? 0,
+    level: s.level ?? 1,
+    totalFail: s.totalFail ?? 0,
   };
 }
 
@@ -81,7 +99,10 @@ export function getSessionLocal() {
 
 export function getUserDataLocal(username) {
   const users = loadUsers();
-  return users[username]?.data || freshData();
+  const raw = users[username]?.data || freshData();
+  // 旧データとの互換性を保つため freshData のフィールドで補完する
+  const base = freshData();
+  return { ...base, ...raw };
 }
 
 function setUserDataLocal(username, data) {
@@ -96,7 +117,9 @@ export function saveSelectedHabitsLocal(username, habitIds) {
   data.selectedHabits = habitIds;
   habitIds.forEach((id) => {
     if (!data.habitStreaks[id]) {
-      data.habitStreaks[id] = { current: 0, best: 0, level: 1 };
+      data.habitStreaks[id] = { currentStreak: 0, best: 0, level: 1, totalFail: 0 };
+    } else {
+      data.habitStreaks[id] = normalizeStreak(data.habitStreaks[id]);
     }
   });
   setUserDataLocal(username, data);
@@ -119,19 +142,40 @@ export function recordResultLocal(username, { habitId, taskText, result, comment
   });
 
   if (!data.habitStreaks[habitId]) {
-    data.habitStreaks[habitId] = { current: 0, best: 0, level: 1 };
+    data.habitStreaks[habitId] = { currentStreak: 0, best: 0, level: 1, totalFail: 0 };
   }
-  const s = data.habitStreaks[habitId];
+  const s = normalizeStreak(data.habitStreaks[habitId]);
 
   if (result === "success") {
     data.successCount += 1;
-    s.current += 1;
-    if (s.current > s.best) s.best = s.current;
-    s.level = Math.min(3, s.level + 1);
+    s.currentStreak += 1;
+    if (s.currentStreak > s.best) s.best = s.currentStreak;
+    // レベルアップ判定（閾値を超えたらレベルアップ＆連続リセット）
+    const threshold = LEVEL_UP_THRESHOLD[s.level];
+    if (threshold && s.currentStreak >= threshold && s.level < 3) {
+      s.level += 1;
+      s.currentStreak = 0;
+    }
+
+    // ポイント付与：1日3pt上限
+    // ※おみくじ報酬はこの上限に含めない（recordOmikujiLocal で別途加算）
+    if (data.dailyPointsDate !== today) {
+      data.dailyPointsDate = today;
+      data.dailyPointsAwarded = 0;
+    }
+    if (data.dailyPointsAwarded < 3) {
+      data.points = (data.points || 0) + 1;
+      data.dailyPointsAwarded += 1;
+    }
   } else {
     data.failCount += 1;
-    s.current = 0;
+    s.totalFail += 1;
+    s.currentStreak = 0;
+    s.level = 1; // 1回でも失敗したらLv1にリセット
   }
+
+  data.habitStreaks[habitId] = s;
+  data.lastLogAt = new Date().toISOString(); // 最終ログ記録日時を更新
 
   setUserDataLocal(username, data);
   return data;
@@ -155,4 +199,23 @@ export function addEmailLogLocal(username, entry) {
   data.emailLog.push(entry);
   users[username].data = data;
   saveUsers(users);
+}
+
+// ポイントを消費する（残高不足時は 0 で止まる）
+export function spendPointsLocal(username, amount) {
+  const data = getUserDataLocal(username);
+  data.points = Math.max(0, (data.points || 0) - amount);
+  setUserDataLocal(username, data);
+  return data;
+}
+
+// おみくじ結果を記録し、ポイントを加算する
+// ※おみくじ報酬は1日3pt上限の対象外
+export function recordOmikujiLocal(username, points) {
+  const data = getUserDataLocal(username);
+  const today = new Date().toISOString().slice(0, 10);
+  data.points = (data.points || 0) + points;
+  data.lastOmikujiDate = today;
+  setUserDataLocal(username, data);
+  return data;
 }

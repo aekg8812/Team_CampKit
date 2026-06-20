@@ -6,6 +6,8 @@
 //   高め（7〜10）: 一日を通して守る・翌朝確認など長期課題
 // ========================================
 
+import { rollUltra, rollTaskLevel, ULTRA_TASK } from "./levelProbability";
+
 export const TASKS_BY_HABIT = {
   sns: {
     1: [
@@ -26,9 +28,9 @@ export const TASKS_BY_HABIT = {
   },
   room: {
     1: [
-      { text: "机の上を5分片付ける",         penaltyLevel: 4 },
-      { text: "床の物を3つ片付ける",          penaltyLevel: 3 },
-      { text: "ゴミを1袋まとめる",            penaltyLevel: 3 },
+      { text: "机の上を5分片付ける",         penaltyLevel: 1 },//4
+      { text: "床の物を3つ片付ける",          penaltyLevel: 1 },//3
+      { text: "ゴミを1袋まとめる",            penaltyLevel: 1 },//3
     ],
     2: [
       { text: "1部屋に掃除機をかける",        penaltyLevel: 4 },
@@ -147,4 +149,12 @@ export function getTasksForHabit(habitId, level) {
     level: lv,
     penaltyLevel: task.penaltyLevel,
   }));
+}
+
+// レベル確率抽選と激重抽選を組み合わせて候補を生成する
+// App.jsx の handleQuestionComplete / generateTasks フォールバック用
+export function buildCandidates(habitId, playerLevel) {
+  if (rollUltra()) return [ULTRA_TASK];
+  const taskLevel = rollTaskLevel(Math.max(1, Math.min(3, playerLevel || 1)));
+  return getTasksForHabit(habitId, taskLevel);
 }

@@ -1,93 +1,86 @@
 // ========================================
 // 第三者メール通知
-// VITE_USE_EMAIL=true のときだけ実際に送信する
-// false（既定）では送信内容をモックデータとして返す（画面表示用）
+// Supabase Edge Function "send-penalty-email" → GAS → Gmail で送信する
+// 送信失敗時は try/catch で握りつぶしてアプリを止めない
 // ========================================
 
 import { supabase } from "./supabase";
 
-const USE_EMAIL = import.meta.env.VITE_USE_EMAIL === "true";
-
-// ───────── 送信条件の判定 ─────────
+// ─── 送信関数 ───
 
 /**
- * 失敗累計が3の倍数のとき通知すべきか判定する（条件A）
- * - notifyEmail が未登録なら false
- * - この失敗回数で既に送信済みなら false
- * - 1日1通上限を超えるなら false
+ * 課題失敗通知（type:1）を送る
+ * テーマの累計失敗が3の倍数に達したときに呼ぶ
  */
-export function shouldSendFailEmail(data) {
-  const { failCount = 0, emailLog = [], notifyEmail } = data;
-  if (!notifyEmail) return false;
-  if (failCount === 0 || failCount % 3 !== 0) return false;
-
-  // この回数で送信済みならスキップ
-  const alreadySent = emailLog.some(
-    (e) => e.reason === "fail" && e.failCountAtSend === failCount
-  );
-  if (alreadySent) return false;
-
-  // 1日1通上限
-  return !isWithin24h(emailLog);
-}
-
-/**
- * 最終ログインから72時間以上経過していたとき通知すべきか判定する（条件B）
- */
-export function shouldSendInactiveEmail(data) {
-  const { lastLoginAt, emailLog = [], notifyEmail } = data;
-  if (!notifyEmail || !lastLoginAt) return false;
-
-  const hoursSinceLast = (Date.now() - new Date(lastLoginAt).getTime()) / (1000 * 3600);
-  if (hoursSinceLast < 72) return false;
-
-  return !isWithin24h(emailLog);
-}
-
-function isWithin24h(emailLog) {
-  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  return emailLog.some((e) => e.sentAt >= dayAgo);
-}
-
-// ───────── 送信 ─────────
-
-/**
- * 第三者通知メールを送る、またはモックデータを返す
- * @param {{ to: string, reason: 'fail'|'inactive', username: string, failCount?: number }}
- * @returns {{ sent: boolean, mock: boolean, to: string, subject: string, body: string }}
- */
-export async function sendThirdPartyNotification({ to, reason, username, failCount }) {
-  const subject =
-    reason === "fail"
-      ? `【サボり癖クリア】${username}さんが課題に${failCount}回失敗しました`
-      : `【サボり癖クリア】${username}さんがアプリを3日間開いていません`;
-
-  const body =
-    reason === "fail"
-      ? `${username}さんが「サボり癖クリア」の課題に累計${failCount}回失敗しました。\n\n励ましのひと言を送ってあげてください！`
-      : `${username}さんが「サボり癖クリア」を3日以上開いていません。\n\nサボっているかもしれません。声をかけてみてください！`;
-
-  if (!USE_EMAIL) {
-    return { sent: false, mock: true, to, subject, body };
-  }
-
+export async function sendPenaltyEmail({ toEmail, targetName, taskName }) {
   try {
-    const { error } = await supabase.functions.invoke("notify", {
-      body: { to, subject, body },
+    await supabase.functions.invoke("send-penalty-email", {
+      body: { toEmail, targetName, taskName, type: 1 },
     });
-    if (error) throw error;
-    return { sent: true, mock: false, to, subject, body };
-  } catch {
-    // 失敗時はモック扱いにフォールバック（画面を止めない）
-    return { sent: false, mock: true, to, subject, body };
+  } catch (e) {
+    console.error("[email] sendPenaltyEmail failed:", e);
   }
 }
 
-/** 送信ログエントリを生成する */
-export function makeEmailLogEntry({ reason, failCountAtSend = null }) {
+/**
+ * 3日放置通知（type:2）を送る
+ * 最終ログ記録から72時間以上経過したときに呼ぶ
+ */
+export async function sendAbsenceEmail({ toEmail, targetName }) {
+  try {
+    await supabase.functions.invoke("send-penalty-email", {
+      body: { toEmail, targetName, type: 2 },
+    });
+  } catch (e) {
+    console.error("[email] sendAbsenceEmail failed:", e);
+  }
+}
+
+// ─── 送信条件の判定 ───
+
+/**
+ * 条件A: テーマ別累計失敗回数が3の倍数かつ未送信のとき true
+ * @param {object} data   - getUserData() の戻り値
+ * @param {string} habitId - 対象テーマID
+ */
+export function shouldSendPenaltyEmail(data, habitId) {
+  const { notifyEmail, emailLog = [], habitStreaks = {} } = data;
+  if (!notifyEmail) return false;
+  const streak = habitStreaks[habitId] || {};
+  const totalFail = streak.totalFail || 0;
+  if (totalFail === 0 || totalFail % 3 !== 0) return false;
+  // この habitId × この totalFail で送信済みならスキップ
+  const alreadySent = emailLog.some(
+    (e) => e.reason === "fail" && e.habitId === habitId && e.failCountAtSend === totalFail
+  );
+  return !alreadySent;
+}
+
+/**
+ * 条件B: 最終ログ記録から72時間以上経過 かつ 直近72時間以内に未送信のとき true
+ */
+export function shouldSendAbsenceEmail(data) {
+  const { notifyEmail, lastLogAt, emailLog = [] } = data;
+  if (!notifyEmail || !lastLogAt) return false;
+  const hoursSinceLast = (Date.now() - new Date(lastLogAt).getTime()) / (1000 * 3600);
+  if (hoursSinceLast < 72) return false;
+  // 直近72hに inactive メールを送っていないか
+  const limit = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
+  const sentRecently = emailLog.some((e) => e.reason === "inactive" && e.sentAt >= limit);
+  return !sentRecently;
+}
+
+// ─── ログエントリ生成 ───
+
+/**
+ * emailLog に追加するエントリを作る
+ * @param {{ reason: 'fail'|'inactive', habitId?: string, failCountAtSend?: number }}
+ */
+export function makeEmailLogEntry({ reason, habitId = null, failCountAtSend = null }) {
   return {
     sentAt: new Date().toISOString(),
     reason,
+    habitId,
     failCountAtSend,
   };
 }

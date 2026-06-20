@@ -3,7 +3,9 @@ import { motion } from "framer-motion";
 import { play, stop } from "../lib/sound";
 import { LEVEL_LABEL } from "../data/tasksByHabit";
 
-// candidates: [{ id, text, level }, ...] を props で受け取る
+const ULTRA_STYLE = { label: "【激重】", color: "#ff2222", note: "覚悟しろ！！！" };
+
+// candidates: [{ id, text, level, penaltyLevel, isUltra? }, ...] を props で受け取る
 export default function GachaScreen({ candidates, onComplete }) {
   const winner = useMemo(
     () => candidates[Math.floor(Math.random() * candidates.length)],
@@ -44,7 +46,7 @@ export default function GachaScreen({ candidates, onComplete }) {
         setDisplayIndex(winIdx >= 0 ? winIdx : 0);
         stop("roulette");
         play("gavel");
-        if (winner.level === 3) play("alarm");
+        if (winner.level === 3 || winner.isUltra) play("alarm");
         setPhase("stop");
         setTimeout(() => onComplete(winner), 2200);
       }
@@ -70,12 +72,13 @@ export default function GachaScreen({ candidates, onComplete }) {
 
   const shown = candidates[displayIndex];
   const stopped = phase === "stop";
-  const style = LEVEL_LABEL[stopped ? winner.level : shown.level];
+  const activeTask = stopped ? winner : shown;
+  const style = activeTask.isUltra ? ULTRA_STYLE : (LEVEL_LABEL[activeTask.level] || LEVEL_LABEL[1]);
 
   return (
     <div
       className={`court-frame flex flex-col items-center justify-center text-center gap-6 ${
-        stopped && winner.level === 3 ? "animate-shake" : ""
+        stopped && (winner.level === 3 || winner.isUltra) ? "animate-shake" : ""
       }`}
     >
       <motion.div
@@ -84,10 +87,13 @@ export default function GachaScreen({ candidates, onComplete }) {
         className="w-full py-10 px-6 rounded-2xl border-4"
         style={{ borderColor: style.color, boxShadow: `0 0 36px ${style.color}55` }}
       >
-        <p className="text-xs tracking-widest mb-3" style={{ color: style.color }}>
+        <p className="text-xs tracking-widest mb-3 font-bold" style={{ color: style.color }}>
           {style.label}
         </p>
-        <p className="text-2xl font-extrabold leading-relaxed">{shown.text}</p>
+        <p className="text-2xl font-extrabold leading-relaxed">{activeTask.text}</p>
+        {stopped && activeTask.isUltra && (
+          <p className="text-xs text-red-400 mt-3 font-bold">⚠️ 激重課題発動！覚悟しろ！</p>
+        )}
       </motion.div>
       {stopped && (
         <motion.p

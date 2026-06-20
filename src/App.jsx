@@ -8,12 +8,21 @@ import GachaScreen from "./screens/GachaScreen";
 import TaskScreen from "./screens/TaskScreen";
 import ResultScreen from "./screens/ResultScreen";
 import LogDetailScreen from "./screens/LogDetailScreen";
+import OmikujiScreen from "./screens/OmikujiScreen";
 
-import { getLoggedInUser, getUserData, recordResult, logout, updateLastLogin, addEmailLog } from "./store";
+import {
+  getLoggedInUser, getUserData, recordResult, logout,
+  updateLastLogin, addEmailLog, spendPoints, recordOmikuji,
+} from "./store";
 import { diagnoseAnswers, generateTasks } from "./lib/claude";
-import { shouldSendFailEmail, shouldSendInactiveEmail, sendThirdPartyNotification, makeEmailLogEntry } from "./lib/email";
+import {
+  shouldSendPenaltyEmail, shouldSendAbsenceEmail,
+  sendPenaltyEmail, sendAbsenceEmail, makeEmailLogEntry,
+} from "./lib/email";
 import { getHabit } from "./data/habits";
 import { getQuestionsForHabit } from "./data/questionsByHabit";
+import { buildCandidates } from "./data/tasksByHabit";
+import { rollUltra, ULTRA_TASK } from "./data/levelProbability";
 
 const S = {
   LOGIN: "login",
@@ -25,6 +34,7 @@ const S = {
   TASK: "task",
   RESULT: "result",
   LOG_DETAIL: "log_detail",
+  OMIKUJI: "omikuji",
 };
 
 export default function App() {
@@ -39,9 +49,6 @@ export default function App() {
   const [diagnosis, setDiagnosis] = useState(null);
   const [taskCandidates, setTaskCandidates] = useState([]);
   const [logEntry, setLogEntry] = useState(null);
-
-  // モックメール表示用（VITE_USE_EMAIL=false のとき送信内容をプレビュー）
-  const [mockEmail, setMockEmail] = useState(null);
 
   // リロード時にログイン状態を復帰
   useEffect(() => {
@@ -58,21 +65,15 @@ export default function App() {
   async function loadData(u) {
     const d = await getUserData();
 
-    // 条件B: 最終ログインから72時間以上経過していたら通知
-    if (shouldSendInactiveEmail(d)) {
-      const result = await sendThirdPartyNotification({
-        to: d.notifyEmail,
-        reason: "inactive",
-        username: u,
-      });
+    // 条件B: 最終ログ記録から72時間以上経過していたら通知
+    if (shouldSendAbsenceEmail(d)) {
+      await sendAbsenceEmail({ toEmail: d.notifyEmail, targetName: u });
       await addEmailLog(makeEmailLogEntry({ reason: "inactive" }));
-      if (result.mock) setMockEmail(result);
     }
 
-    // 最終ログイン時刻を更新
     await updateLastLogin();
-
     setData(d);
+
     if (!d.selectedHabits || d.selectedHabits.length === 0) {
       setScreen(S.HABIT_SELECT);
     } else {
@@ -104,15 +105,33 @@ export default function App() {
 
     const habit = getHabit(habitId);
     const questions = getQuestionsForHabit(habitId);
-    const level = data?.habitStreaks?.[habitId]?.level || 1;
+    const playerLevel = data?.habitStreaks?.[habitId]?.level || 1;
 
-    const [diagText, candidates] = await Promise.all([
+    // 激重抽選をここで行い、当選したら AI 生成をスキップ
+    if (rollUltra()) {
+      const [diagText] = await Promise.all([
+        diagnoseAnswers({ habitId, habitLabel: habit.label, questions, answers }),
+      ]);
+      setDiagnosis(diagText);
+      setTaskCandidates([ULTRA_TASK]);
+      return;
+    }
+
+    // 通常フロー：レベル確率でタスクレベルを決定し AI 生成
+    const candidates = buildCandidates(habitId, playerLevel);
+    const effectiveLevel = candidates[0]?.level || playerLevel;
+
+    const [diagText, aiCandidates] = await Promise.all([
       diagnoseAnswers({ habitId, habitLabel: habit.label, questions, answers }),
-      generateTasks({ habitId, habitLabel: habit.label, level, answers }),
+      generateTasks({ habitId, habitLabel: habit.label, level: effectiveLevel, answers }),
     ]);
 
     setDiagnosis(diagText);
-    setTaskCandidates(candidates);
+    // AI生成が candidates と異なる level を持つ場合があるため、
+    // buildCandidates で決まった level に統一する
+    setTaskCandidates(
+      aiCandidates.map((t) => ({ ...t, level: effectiveLevel }))
+    );
   }
 
   function handleDiagnosisNext() {
@@ -124,12 +143,14 @@ export default function App() {
     setScreen(S.TASK);
   }
 
-  async function handleTaskSuccess({ comment, withEvidence, imageDataUrl, durationSec }) {
+  async function handleTaskSuccess({ comment, withEvidence, imageDataUrl, durationSec, rescued }) {
     const newData = await recordResult({
       habitId: currentHabit,
-      taskText: currentTask.text,
+      taskText: rescued ? "???" : currentTask.text,
       result: "success",
-      comment: comment + (withEvidence ? "" : "（自己申告）"),
+      comment: rescued
+        ? "【救済】50ptを消費して成功扱い"
+        : comment + (withEvidence ? "" : "（自己申告）"),
       imageData: imageDataUrl || null,
       durationSec: durationSec || 0,
     });
@@ -150,20 +171,27 @@ export default function App() {
     const latestData = newData || (await getUserData());
     setData(latestData);
 
-    // 条件A: 失敗累計が3の倍数に達したら通知
-    if (shouldSendFailEmail(latestData)) {
-      const result = await sendThirdPartyNotification({
-        to: latestData.notifyEmail,
-        reason: "fail",
-        username,
-        failCount: latestData.failCount,
+    // 条件A: テーマ別累計失敗が3の倍数に達したとき通知
+    if (shouldSendPenaltyEmail(latestData, currentHabit)) {
+      await sendPenaltyEmail({
+        toEmail: latestData.notifyEmail,
+        targetName: username,
+        taskName: currentTask.text,
       });
-      await addEmailLog(makeEmailLogEntry({ reason: "fail", failCountAtSend: latestData.failCount }));
-      if (result.mock) setMockEmail(result);
+      await addEmailLog(makeEmailLogEntry({
+        reason: "fail",
+        habitId: currentHabit,
+        failCountAtSend: latestData.habitStreaks?.[currentHabit]?.totalFail,
+      }));
     }
 
     setLastSuccess(false);
     setScreen(S.RESULT);
+  }
+
+  async function handleSpendPoints(amount) {
+    const newData = await spendPoints(amount);
+    setData(newData || (await getUserData()));
   }
 
   async function handleLogout() {
@@ -178,33 +206,17 @@ export default function App() {
     setScreen(S.LOG_DETAIL);
   }
 
-  return (
-    <>
-      {/* 画面本体 */}
-      {renderScreen()}
+  function handleOmikuji() {
+    setScreen(S.OMIKUJI);
+  }
 
-      {/* モックメール表示オーバーレイ（VITE_USE_EMAIL=false のとき送信内容をプレビュー） */}
-      {mockEmail && (
-        <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
-          <div className="bg-court-panel rounded-xl p-6 max-w-sm w-full flex flex-col gap-4">
-            <p className="text-xs text-court-gold tracking-widest">📧 メール通知プレビュー</p>
-            <p className="text-xs text-gray-400">本番（VITE_USE_EMAIL=true）では以下を送信します</p>
-            <div className="bg-court-bg rounded-lg p-3 text-xs space-y-2">
-              <p><span className="text-gray-400">宛先：</span>{mockEmail.to}</p>
-              <p><span className="text-gray-400">件名：</span>{mockEmail.subject}</p>
-              <p className="whitespace-pre-wrap text-gray-300 mt-1">{mockEmail.body}</p>
-            </div>
-            <button
-              onClick={() => setMockEmail(null)}
-              className="px-4 py-2 bg-court-gold text-court-bg font-bold rounded-lg text-sm"
-            >
-              閉じる
-            </button>
-          </div>
-        </div>
-      )}
-    </>
-  );
+  async function handleOmikujiComplete(result) {
+    const newData = await recordOmikuji(result.points);
+    setData(newData || (await getUserData()));
+    setScreen(S.MYPAGE);
+  }
+
+  return renderScreen();
 
   function renderScreen() {
     switch (screen) {
@@ -226,6 +238,7 @@ export default function App() {
             onEditHabits={() => setScreen(S.HABIT_SELECT)}
             onLogout={handleLogout}
             onViewLog={handleViewLog}
+            onOmikuji={handleOmikuji}
           />
         ) : null;
       case S.QUESTION:
@@ -243,14 +256,19 @@ export default function App() {
         return (
           <TaskScreen
             task={currentTask}
+            habitId={currentHabit}
+            points={data?.points || 0}
             onSuccess={handleTaskSuccess}
             onFail={handleTaskFail}
+            onSpendPoints={handleSpendPoints}
           />
         );
       case S.RESULT:
         return <ResultScreen success={lastSuccess} onBackToMyPage={() => setScreen(S.MYPAGE)} />;
       case S.LOG_DETAIL:
         return <LogDetailScreen entry={logEntry} onBack={() => setScreen(S.MYPAGE)} />;
+      case S.OMIKUJI:
+        return <OmikujiScreen onComplete={handleOmikujiComplete} />;
       default:
         return null;
     }
