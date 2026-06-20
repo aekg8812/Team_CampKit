@@ -1,5 +1,5 @@
 import { getHabit } from "../data/habits";
-import { isFirebaseMode } from "../store";
+import { isSupabaseMode } from "../store";
 
 // 成功/失敗の円グラフ（SVGで自作・ライブラリ不要）
 function PieChart({ success, fail }) {
@@ -69,7 +69,7 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
       </div>
       <p className="text-sm text-gray-400 -mt-3">
         {username} さん
-        {isFirebaseMode && <span className="ml-2 text-court-gold">[クラウド保存中]</span>}
+        {isSupabaseMode && <span className="ml-2 text-court-gold">[クラウド保存中]</span>}
       </p>
 
       {/* 円グラフ */}

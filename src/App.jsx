@@ -31,11 +31,14 @@ export default function App() {
 
   // リロード時にログイン状態を復帰
   useEffect(() => {
-    const u = getLoggedInUser();
-    if (u) {
-      setUsername(u);
-      loadData(u);
+    async function init() {
+      const u = await getLoggedInUser();
+      if (u) {
+        setUsername(u);
+        loadData(u);
+      }
     }
+    init();
   }, []);
 
   async function loadData(u) {
