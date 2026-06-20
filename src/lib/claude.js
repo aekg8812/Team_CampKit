@@ -1,3 +1,6 @@
+import { STATIC_DYNAMIC_QUESTIONS, STATIC_VERDICT } from "../data/staticData";
+const USE_API = import.meta.env.VITE_USE_API === "true";
+
 const API_KEY = import.meta.env.VITE_CLAUDE_API_KEY;
 const MODEL = "claude-sonnet-4-6";
 
@@ -32,7 +35,12 @@ async function callClaude({ system, user, maxTokens = 1024 }) {
 // ───────────────────────────────
 // ① 後半5問の動的生成
 // ───────────────────────────────
+
+
 export async function generateDynamicQuestions(firstHalfSummary) {
+   if (!USE_API) {
+    return STATIC_DYNAMIC_QUESTIONS;
+  }
   const system = `あなたはAI裁判長です。
 被告の前半5問の回答をもとに、サボり傾向を分析し、
 最も「図星を突く」追加尋問を5問生成してください。
@@ -80,6 +88,7 @@ const FALLBACK_QUESTIONS = [
 // ───────────────────────────────
 // ② 断罪一言 + ③ 予言（まとめて1回のAPIで生成）
 // ───────────────────────────────
+
 export async function generateVerdict({
   allAnswers,
   task,
@@ -88,6 +97,9 @@ export async function generateVerdict({
   time,
   criminalRecord,
 }) {
+    if (!USE_API) {
+    return STATIC_VERDICT;
+  }
   const system = `あなたはAI裁判長です。毒舌だが笑えるトーンを保ってください。
 以下の被告の回答・判決タスク・外部データをもとに、「断罪一言」と「今夜の行動の予言」を生成します。
 
