@@ -1,12 +1,4 @@
-import { db } from "./firebase";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  increment,
-  serverTimestamp,
-} from "firebase/firestore";
+import { supabase } from "./supabase";
 
 // ブラウザごとの匿名IDを localStorage に保持
 export function getUserId() {
@@ -28,7 +20,7 @@ const DEFAULT_RECORD = {
   predictionHits: 0,
 };
 
-// Firebaseが未設定/失敗の時に使うローカルフォールバック
+// Supabaseが未設定/失敗の時に使うローカルフォールバック
 function localGet() {
   try {
     const raw = localStorage.getItem("yogen_record");
@@ -43,21 +35,41 @@ function localSet(record) {
   } catch {}
 }
 
+function fromRow(row) {
+  return {
+    criminalRecord: row.criminal_record ?? 0,
+    totalVerdicts: row.total_verdicts ?? 0,
+    totalCleared: row.total_cleared ?? 0,
+    predictionHits: row.prediction_hits ?? 0,
+  };
+}
+
 // 前科データ取得（無ければ初期化して返す）
 export async function fetchRecord(userId) {
   try {
-    const ref = doc(db, "defendants", userId);
-    const snap = await getDoc(ref);
-    if (snap.exists()) {
-      const data = snap.data();
-      localSet(data);
-      return data;
+    const { data, error } = await supabase
+      .from("criminal_records")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (error || !data) {
+      await supabase.from("criminal_records").upsert({
+        user_id: userId,
+        criminal_record: 0,
+        total_verdicts: 0,
+        total_cleared: 0,
+        prediction_hits: 0,
+        last_verdict_at: new Date().toISOString(),
+      });
+      localSet(DEFAULT_RECORD);
+      return { ...DEFAULT_RECORD };
     }
-    await setDoc(ref, { ...DEFAULT_RECORD, lastVerdictAt: serverTimestamp() });
-    localSet(DEFAULT_RECORD);
-    return { ...DEFAULT_RECORD };
-  } catch (e) {
-    // Firebase未設定でもデモが動くようローカルにフォールバック
+
+    const record = fromRow(data);
+    localSet(record);
+    return record;
+  } catch {
     return localGet();
   }
 }
@@ -65,12 +77,18 @@ export async function fetchRecord(userId) {
 // 判決を受けたら総数+1
 export async function recordVerdict(userId) {
   try {
-    const ref = doc(db, "defendants", userId);
-    await updateDoc(ref, {
-      totalVerdicts: increment(1),
-      lastVerdictAt: serverTimestamp(),
+    const current = await fetchRecord(userId);
+    current.totalVerdicts += 1;
+    await supabase.from("criminal_records").upsert({
+      user_id: userId,
+      criminal_record: current.criminalRecord,
+      total_verdicts: current.totalVerdicts,
+      total_cleared: current.totalCleared,
+      prediction_hits: current.predictionHits,
+      last_verdict_at: new Date().toISOString(),
     });
-  } catch (e) {
+    localSet(current);
+  } catch {
     const r = localGet();
     r.totalVerdicts += 1;
     localSet(r);
@@ -80,9 +98,18 @@ export async function recordVerdict(userId) {
 // 執行完了（予言を覆した）
 export async function recordCleared(userId) {
   try {
-    const ref = doc(db, "defendants", userId);
-    await updateDoc(ref, { totalCleared: increment(1) });
-  } catch (e) {
+    const current = await fetchRecord(userId);
+    current.totalCleared += 1;
+    await supabase.from("criminal_records").upsert({
+      user_id: userId,
+      criminal_record: current.criminalRecord,
+      total_verdicts: current.totalVerdicts,
+      total_cleared: current.totalCleared,
+      prediction_hits: current.predictionHits,
+      last_verdict_at: new Date().toISOString(),
+    });
+    localSet(current);
+  } catch {
     const r = localGet();
     r.totalCleared += 1;
     localSet(r);
@@ -92,12 +119,19 @@ export async function recordCleared(userId) {
 // 執行失敗（予言的中）→ 前科+1
 export async function recordFailure(userId) {
   try {
-    const ref = doc(db, "defendants", userId);
-    await updateDoc(ref, {
-      criminalRecord: increment(1),
-      predictionHits: increment(1),
+    const current = await fetchRecord(userId);
+    current.criminalRecord += 1;
+    current.predictionHits += 1;
+    await supabase.from("criminal_records").upsert({
+      user_id: userId,
+      criminal_record: current.criminalRecord,
+      total_verdicts: current.totalVerdicts,
+      total_cleared: current.totalCleared,
+      prediction_hits: current.predictionHits,
+      last_verdict_at: new Date().toISOString(),
     });
-  } catch (e) {
+    localSet(current);
+  } catch {
     const r = localGet();
     r.criminalRecord += 1;
     r.predictionHits += 1;
