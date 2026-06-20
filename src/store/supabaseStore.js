@@ -13,9 +13,11 @@ function toEmail(username) {
 function freshData() {
   return {
     selectedHabits: [],
-    habitStreaks: {},     // { [habitId]: { currentStreak, best, level, totalFail } }
+    habitStreaks: {},       // { [habitId]: { currentStreak, best, level, totalFail } }
     successCount: 0,
     failCount: 0,
+    failedTasks: [],       // 失敗したタスク名の時系列配列（メール本文用）
+    lastPenaltyFailCount: 0, // 最後にペナルティメールを送った時点の failCount
     history: [],
     notifyEmail: null,
     lastLoginAt: null,
@@ -44,19 +46,21 @@ function rowToData(row) {
   if (!row) return freshData();
   const base = freshData();
   return {
-    selectedHabits:    row.selected_habits    ?? base.selectedHabits,
-    habitStreaks:      row.habit_streaks       ?? base.habitStreaks,
-    successCount:      row.success_count       ?? base.successCount,
-    failCount:         row.fail_count          ?? base.failCount,
-    history:           row.history             ?? base.history,
-    notifyEmail:       row.notify_email        ?? base.notifyEmail,
-    lastLoginAt:       row.last_login_at       ?? base.lastLoginAt,
-    lastLogAt:         row.last_log_at         ?? base.lastLogAt,
-    emailLog:          row.email_log           ?? base.emailLog,
-    points:            row.points              ?? base.points,
-    dailyPointsDate:   row.daily_points_date   ?? base.dailyPointsDate,
-    dailyPointsAwarded:row.daily_points_awarded?? base.dailyPointsAwarded,
-    lastOmikujiDate:   row.last_omikuji_date   ?? base.lastOmikujiDate,
+    selectedHabits:       row.selected_habits         ?? base.selectedHabits,
+    habitStreaks:         row.habit_streaks            ?? base.habitStreaks,
+    successCount:         row.success_count            ?? base.successCount,
+    failCount:            row.fail_count               ?? base.failCount,
+    failedTasks:          row.failed_tasks             ?? base.failedTasks,
+    lastPenaltyFailCount: row.last_penalty_fail_count  ?? base.lastPenaltyFailCount,
+    history:              row.history                  ?? base.history,
+    notifyEmail:          row.notify_email             ?? base.notifyEmail,
+    lastLoginAt:          row.last_login_at            ?? base.lastLoginAt,
+    lastLogAt:            row.last_log_at              ?? base.lastLogAt,
+    emailLog:             row.email_log                ?? base.emailLog,
+    points:               row.points                   ?? base.points,
+    dailyPointsDate:      row.daily_points_date        ?? base.dailyPointsDate,
+    dailyPointsAwarded:   row.daily_points_awarded     ?? base.dailyPointsAwarded,
+    lastOmikujiDate:      row.last_omikuji_date        ?? base.lastOmikujiDate,
   };
 }
 
@@ -77,6 +81,8 @@ export async function registerSb(username, password, notifyEmail) {
       habit_streaks: {},
       success_count: 0,
       fail_count: 0,
+      failed_tasks: [],
+      last_penalty_fail_count: 0,
       history: [],
       notify_email: notifyEmail || null,
       email_log: [],
@@ -206,6 +212,8 @@ export async function recordResultSb({ habitId, taskText, result, comment, image
     s.totalFail += 1;
     s.currentStreak = 0;
     s.level = 1;
+    data.failedTasks = data.failedTasks || [];
+    data.failedTasks.push(taskText);
   }
 
   data.habitStreaks[habitId] = s;
@@ -218,6 +226,7 @@ export async function recordResultSb({ habitId, taskText, result, comment, image
     habit_streaks: data.habitStreaks,
     success_count: data.successCount,
     fail_count: data.failCount,
+    failed_tasks: data.failedTasks,
     history: data.history,
     points: data.points,
     daily_points_date: data.dailyPointsDate,
@@ -262,6 +271,28 @@ export async function spendPointsSb(amount) {
     .update({ points: data.points, updated_at: new Date().toISOString() })
     .eq("id", uid);
   return data;
+}
+
+// ペナルティメール送信済みを記録する（lastPenaltyFailCount 更新 + emailLog 追記）
+export async function recordPenaltyEmailSentSb(failCount) {
+  const uid = await getCurrentUidSb();
+  if (!uid) return;
+  const data = await getUserDataSb();
+  data.lastPenaltyFailCount = failCount;
+  const emailLog = [...(data.emailLog || []), {
+    sentAt: new Date().toISOString(),
+    reason: "fail",
+    failCountAtSend: failCount,
+  }];
+  await supabase
+    .from("user_data")
+    .update({
+      last_penalty_fail_count: failCount,
+      email_log: emailLog,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", uid);
+  return { ...data, lastPenaltyFailCount: failCount, emailLog };
 }
 
 // おみくじ結果を記録し、ポイントを加算する（1日上限の対象外）

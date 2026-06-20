@@ -13,6 +13,7 @@ import OmikujiScreen from "./screens/OmikujiScreen";
 import {
   getLoggedInUser, getUserData, recordResult, logout,
   updateLastLogin, addEmailLog, spendPoints, recordOmikuji,
+  recordPenaltyEmailSent,
 } from "./store";
 import { diagnoseAnswers, generateTasks } from "./lib/claude";
 import {
@@ -171,18 +172,15 @@ export default function App() {
     const latestData = newData || (await getUserData());
     setData(latestData);
 
-    // 条件A: テーマ別累計失敗が3の倍数に達したとき通知
-    if (shouldSendPenaltyEmail(latestData, currentHabit)) {
+    // 条件A: 全体の累積失敗回数が 3 の倍数に達したとき通知（多重送信防止付き）
+    if (shouldSendPenaltyEmail(latestData)) {
       await sendPenaltyEmail({
         toEmail: latestData.notifyEmail,
         targetName: username,
-        taskName: currentTask.text,
+        failedTasks: latestData.failedTasks || [],
+        failCount: latestData.failCount,
       });
-      await addEmailLog(makeEmailLogEntry({
-        reason: "fail",
-        habitId: currentHabit,
-        failCountAtSend: latestData.habitStreaks?.[currentHabit]?.totalFail,
-      }));
+      await recordPenaltyEmailSent(latestData.failCount);
     }
 
     setLastSuccess(false);
@@ -207,12 +205,20 @@ export default function App() {
   }
 
   function handleOmikuji() {
+    const today = new Date().toISOString().slice(0, 10);
+    if (data?.lastOmikujiDate === today) return; // ボタン disabled をすり抜けた場合の二重防止
     setScreen(S.OMIKUJI);
   }
 
-  async function handleOmikujiComplete(result) {
+  // 結果が出た瞬間に呼ばれる（リロードしても当日分が保存される）
+  async function handleOmikujiReveal(result) {
     const newData = await recordOmikuji(result.points);
-    setData(newData || (await getUserData()));
+    if (newData) setData(newData);
+  }
+
+  // 5秒後のナビゲーション（データは handleOmikujiReveal で保存済み）
+  async function handleOmikujiComplete() {
+    setData(await getUserData());
     setScreen(S.MYPAGE);
   }
 
@@ -268,7 +274,12 @@ export default function App() {
       case S.LOG_DETAIL:
         return <LogDetailScreen entry={logEntry} onBack={() => setScreen(S.MYPAGE)} />;
       case S.OMIKUJI:
-        return <OmikujiScreen onComplete={handleOmikujiComplete} />;
+        return (
+          <OmikujiScreen
+            onReveal={handleOmikujiReveal}
+            onComplete={handleOmikujiComplete}
+          />
+        );
       default:
         return null;
     }

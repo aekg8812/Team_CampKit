@@ -23,6 +23,21 @@ function providerHasKey() {
   return provider().hasKey();
 }
 
+// ─── AI モード（画面表示・デバッグ用）───
+// active: 実際に API を呼ぶ状態か
+// label : "Gemini" | "Claude" | null（モック時）
+export const AI_MODE = (() => {
+  if (!USE_API) return { active: false, provider: null, label: null };
+  if (!providerHasKey()) return { active: false, provider: PROVIDER, label: null };
+  const label = PROVIDER === "gemini" ? "Gemini" : "Claude";
+  return { active: true, provider: PROVIDER, label };
+})();
+
+console.log(
+  `[AI] mode=${AI_MODE.active ? AI_MODE.label : "mock"}`,
+  AI_MODE.active ? "" : `(VITE_USE_API=${USE_API}, key=${providerHasKey()})`
+);
+
 // ─── フォールバックデータ ───
 
 const DIAGNOSIS_FALLBACKS = {
@@ -82,12 +97,20 @@ function pickDiagnosisFallback(habitId) {
  */
 export async function judgeEvidence({ base64, mediaType, taskText }) {
   if (!USE_API || !providerHasKey()) {
-    return { ok: true, message: "証拠を受理しました（モック判定）" };
+    console.log("[AI] judgeEvidence → mock");
+    // 疑似ローディング：デモでも「解析している感」を出す
+    await new Promise((r) => setTimeout(r, 700 + Math.random() * 400));
+    const score = Math.floor(Math.random() * 16) + 80; // 80〜95
+    return { ok: true, score, message: "証拠を受理しました（モック判定）" };
   }
+  console.log(`[AI:${PROVIDER}] judgeEvidence 開始`, { taskText });
   try {
-    return await provider().judgeEvidence({ base64, mediaType, taskText });
-  } catch {
-    return { ok: true, message: "判定できませんでしたが受理しました" };
+    const result = await provider().judgeEvidence({ base64, mediaType, taskText });
+    console.log(`[AI:${PROVIDER}] judgeEvidence 完了 → score:${result.score}`, result.message);
+    return result;
+  } catch (e) {
+    console.warn(`[AI:${PROVIDER}] judgeEvidence 失敗、フォールバック:`, e.message);
+    return { ok: true, score: 80, message: "判定できませんでしたが受理しました" };
   }
 }
 
@@ -97,12 +120,16 @@ export async function judgeEvidence({ base64, mediaType, taskText }) {
  */
 export async function diagnoseAnswers({ habitId, habitLabel, questions, answers }) {
   if (!USE_API || !providerHasKey()) {
+    console.log("[AI] diagnoseAnswers → mock");
     return pickDiagnosisFallback(habitId);
   }
+  console.log(`[AI:${PROVIDER}] diagnoseAnswers 開始`, { habitId });
   try {
     const result = await provider().diagnoseAnswers({ habitId, habitLabel, questions, answers });
+    console.log(`[AI:${PROVIDER}] diagnoseAnswers 完了`);
     return result || pickDiagnosisFallback(habitId);
-  } catch {
+  } catch (e) {
+    console.warn(`[AI:${PROVIDER}] diagnoseAnswers 失敗、フォールバック:`, e.message);
     return pickDiagnosisFallback(habitId);
   }
 }
@@ -113,11 +140,16 @@ export async function diagnoseAnswers({ habitId, habitLabel, questions, answers 
  */
 export async function generateTasks({ habitId, habitLabel, level, answers }) {
   if (!USE_API || !providerHasKey()) {
+    console.log("[AI] generateTasks → 固定データ");
     return getTasksForHabit(habitId, level);
   }
+  console.log(`[AI:${PROVIDER}] generateTasks 開始`, { habitId, level });
   try {
-    return await provider().generateTasks({ habitId, habitLabel, level, answers });
-  } catch {
+    const result = await provider().generateTasks({ habitId, habitLabel, level, answers });
+    console.log(`[AI:${PROVIDER}] generateTasks 完了 → ${result.length}件`);
+    return result;
+  } catch (e) {
+    console.warn(`[AI:${PROVIDER}] generateTasks 失敗、固定データ:`, e.message);
     return getTasksForHabit(habitId, level);
   }
 }

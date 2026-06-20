@@ -8,21 +8,26 @@ const REQUIRED_SHAKES = 3;
 
 // おみくじ画面
 // props:
-//   onComplete: (result: { result, points, color, comment }) => void
-//               結果表示5秒後に自動で呼ばれる。ポイント加算は App.jsx 側で行う。
-export default function OmikujiScreen({ onComplete }) {
+//   onReveal:   (result) => void  結果が出た瞬間に呼ぶ（即時保存用）
+//   onComplete: ()       => void  5秒後に呼ぶ（画面遷移用）
+export default function OmikujiScreen({ onReveal, onComplete }) {
   const [phase, setPhase] = useState("shake"); // shake | reveal
   const [result, setResult] = useState(null);
   const [shakeCount, setShakeCount] = useState(0);
   const controls = useAnimation();
   const autoBackRef = useRef(null);
+  // レースコンディション防止
+  const isAnimatingRef = useRef(false);
+  const revealedRef = useRef(false);
 
   useEffect(() => {
     return () => clearTimeout(autoBackRef.current);
   }, []);
 
   async function handleShake() {
-    if (phase !== "shake") return;
+    // アニメーション中 / 結果表示済み / reveal フェーズ は何もしない
+    if (phase !== "shake" || isAnimatingRef.current || revealedRef.current) return;
+    isAnimatingRef.current = true;
 
     play("omikuji_shake");
     const newCount = shakeCount + 1;
@@ -33,21 +38,25 @@ export default function OmikujiScreen({ onComplete }) {
       transition: { duration: 0.5, ease: "easeInOut" },
     });
 
-    // 3回目で結果へ
-    if (newCount >= REQUIRED_SHAKES) {
-      // 振り終わりのアニメーション完了後にめくる
+    isAnimatingRef.current = false;
+
+    // 3回目で結果へ（revealedRef で二重呼び出しを防ぐ）
+    if (newCount >= REQUIRED_SHAKES && !revealedRef.current) {
+      revealedRef.current = true;
       setTimeout(() => reveal(), 200);
     }
   }
 
-  function reveal() {
+  async function reveal() {
     play("omikuji_result");
     const r = drawOmikuji();
     setResult(r);
     setPhase("reveal");
-    // 5秒後にマイページへ戻る
+    // 保存完了を待ってから5秒カウント開始
+    // （Supabaseが遅くても「戻ったら引けてしまう」を防ぐ）
+    try { await onReveal?.(r); } catch {}
     autoBackRef.current = setTimeout(() => {
-      onComplete(r);
+      onComplete?.();
     }, 5000);
   }
 

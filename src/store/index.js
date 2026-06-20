@@ -85,4 +85,10 @@ export async function recordOmikuji(points) {
   return L.recordOmikujiLocal(currentUsername, points);
 }
 
+// ペナルティメール送信済みを記録する（lastPenaltyFailCount 更新 + emailLog 追記）
+export async function recordPenaltyEmailSent(failCount) {
+  if (USE_SB) return await S.recordPenaltyEmailSentSb(failCount);
+  return L.recordPenaltyEmailSentLocal(currentUsername, failCount);
+}
+
 export const isSupabaseMode = USE_SB;

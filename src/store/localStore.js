@@ -32,9 +32,11 @@ function saveUsers(users) {
 function freshData() {
   return {
     selectedHabits: [],
-    habitStreaks: {},     // { [habitId]: { currentStreak, best, level, totalFail } }
+    habitStreaks: {},       // { [habitId]: { currentStreak, best, level, totalFail } }
     successCount: 0,
     failCount: 0,
+    failedTasks: [],       // 失敗したタスク名の時系列配列（メール本文用）
+    lastPenaltyFailCount: 0, // 最後にペナルティメールを送った時点の failCount
     history: [],
     notifyEmail: null,
     lastLoginAt: null,
@@ -172,6 +174,8 @@ export function recordResultLocal(username, { habitId, taskText, result, comment
     s.totalFail += 1;
     s.currentStreak = 0;
     s.level = 1; // 1回でも失敗したらLv1にリセット
+    data.failedTasks = data.failedTasks || [];
+    data.failedTasks.push(taskText);
   }
 
   data.habitStreaks[habitId] = s;
@@ -205,6 +209,16 @@ export function addEmailLogLocal(username, entry) {
 export function spendPointsLocal(username, amount) {
   const data = getUserDataLocal(username);
   data.points = Math.max(0, (data.points || 0) - amount);
+  setUserDataLocal(username, data);
+  return data;
+}
+
+// ペナルティメール送信済みを記録する（lastPenaltyFailCount 更新 + emailLog 追記）
+export function recordPenaltyEmailSentLocal(username, failCount) {
+  const data = getUserDataLocal(username);
+  data.lastPenaltyFailCount = failCount;
+  data.emailLog = data.emailLog || [];
+  data.emailLog.push({ sentAt: new Date().toISOString(), reason: "fail", failCountAtSend: failCount });
   setUserDataLocal(username, data);
   return data;
 }

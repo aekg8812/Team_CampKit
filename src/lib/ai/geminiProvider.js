@@ -36,13 +36,18 @@ export async function judgeEvidence({ base64, mediaType, taskText }) {
         `課題：「${taskText}」\n` +
         `この画像が課題の証拠として妥当かゆるく判定し、画像の具体的な内容に触れた一言コメントを日本語で返してください。\n` +
         `方針：「明らかに無関係・明らかにサボり」でない限り合格。グレーは合格。\n` +
-        `必ずJSONのみを出力。前後に説明やコードフェンスを付けない：{"ok":true,"message":"一言"}`,
+        `score は 0〜100 の整数で「課題に対する証拠の妥当性」を表す（高いほどよい）。\n` +
+        `必ずJSONのみを出力。前後に説明やコードフェンスを付けない：{"ok":true,"score":85,"message":"一言"}`,
     },
   ];
   const raw = await callGemini(parts);
   const clean = raw.replace(/```json|```/g, "").trim();
   const parsed = JSON.parse(clean);
-  return { ok: !!parsed.ok, message: parsed.message || "判定しました" };
+  return {
+    ok: !!parsed.ok,
+    score: typeof parsed.score === "number" ? Math.min(100, Math.max(0, Math.round(parsed.score))) : 75,
+    message: parsed.message || "判定しました",
+  };
 }
 
 // ───────── サボり傾向診断 ─────────

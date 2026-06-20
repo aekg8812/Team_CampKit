@@ -10,12 +10,13 @@ import { supabase } from "./supabase";
 
 /**
  * 課題失敗通知（type:1）を送る
- * テーマの累計失敗が3の倍数に達したときに呼ぶ
+ * 全体の cumulative failCount が 3 の倍数に達したときに呼ぶ
+ * @param {{ toEmail, targetName, failedTasks: string[], failCount: number }}
  */
-export async function sendPenaltyEmail({ toEmail, targetName, taskName }) {
+export async function sendPenaltyEmail({ toEmail, targetName, failedTasks = [], failCount }) {
   try {
     await supabase.functions.invoke("send-penalty-email", {
-      body: { toEmail, targetName, taskName, type: 1 },
+      body: { toEmail, targetName, failedTasks, failCount, type: 1 },
     });
   } catch (e) {
     console.error("[email] sendPenaltyEmail failed:", e);
@@ -39,21 +40,15 @@ export async function sendAbsenceEmail({ toEmail, targetName }) {
 // ─── 送信条件の判定 ───
 
 /**
- * 条件A: テーマ別累計失敗回数が3の倍数かつ未送信のとき true
- * @param {object} data   - getUserData() の戻り値
- * @param {string} habitId - 対象テーマID
+ * 条件A: 全体の累積失敗回数（data.failCount）が 3 の倍数 かつ
+ *        前回送信時の failCount より増えているとき true
+ * @param {object} data - getUserData() の戻り値
  */
-export function shouldSendPenaltyEmail(data, habitId) {
-  const { notifyEmail, emailLog = [], habitStreaks = {} } = data;
+export function shouldSendPenaltyEmail(data) {
+  const { notifyEmail, failCount = 0, lastPenaltyFailCount = 0 } = data;
   if (!notifyEmail) return false;
-  const streak = habitStreaks[habitId] || {};
-  const totalFail = streak.totalFail || 0;
-  if (totalFail === 0 || totalFail % 3 !== 0) return false;
-  // この habitId × この totalFail で送信済みならスキップ
-  const alreadySent = emailLog.some(
-    (e) => e.reason === "fail" && e.habitId === habitId && e.failCountAtSend === totalFail
-  );
-  return !alreadySent;
+  if (failCount === 0 || failCount % 3 !== 0) return false;
+  return failCount > lastPenaltyFailCount;
 }
 
 /**
@@ -70,17 +65,14 @@ export function shouldSendAbsenceEmail(data) {
   return !sentRecently;
 }
 
-// ─── ログエントリ生成 ───
+// ─── ログエントリ生成（absence 用） ───
 
 /**
- * emailLog に追加するエントリを作る
- * @param {{ reason: 'fail'|'inactive', habitId?: string, failCountAtSend?: number }}
+ * emailLog に追加するエントリを作る（放置メール用）
  */
-export function makeEmailLogEntry({ reason, habitId = null, failCountAtSend = null }) {
+export function makeEmailLogEntry({ reason }) {
   return {
     sentAt: new Date().toISOString(),
     reason,
-    habitId,
-    failCountAtSend,
   };
 }

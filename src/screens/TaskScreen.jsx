@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { LEVEL_LABEL, getTasksForHabit } from "../data/tasksByHabit";
 import { getPenaltySeconds } from "../data/penaltyTime";
 import { REGACHA_OPTIONS, RESCUE_COST } from "../data/levelProbability";
 import { judgeEvidence } from "../lib/claude";
+import { AI_MODE } from "../lib/ai/index";
 
 // 課題提示 + カウントダウン + 証拠提出（画像/コメント）+ 再ガチャ/救済
 // props:
@@ -19,9 +21,16 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
   const [remaining, setRemaining] = useState(penaltySeconds);
   const [comment, setComment] = useState("");
   const [imageData, setImageData] = useState(null); // { base64, mediaType, preview }
-  const [judging, setJudging] = useState(false);
   const [judgeMsg, setJudgeMsg] = useState("");
   const [showOptions, setShowOptions] = useState(false);
+
+  // 画像判定フェーズ管理
+  const [judgePhase, setJudgePhase] = useState(null); // null | "analyzing" | "result"
+  const [judgeResult, setJudgeResult] = useState(null); // { ok, score, message }
+  const [displayScore, setDisplayScore] = useState(0);
+  const [displayComment, setDisplayComment] = useState("");
+  const [typingDone, setTypingDone] = useState(false);
+  const pendingRef = useRef(null); // { imageDataUrl, durationSec, comment }
 
   const startTimeRef = useRef(Date.now());
   const timerRef = useRef(null);
@@ -44,6 +53,64 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
     return () => clearInterval(timerRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 判定結果のアニメーション
+  useEffect(() => {
+    if (judgePhase !== "result" || !judgeResult) return;
+
+    setDisplayScore(0);
+    setDisplayComment("");
+    setTypingDone(false);
+
+    // スコアカウントアップ（イーズアウト）
+    const targetScore = judgeResult.score ?? 80;
+    const countDuration = 1200;
+    const startTime = performance.now();
+    let animFrame;
+    function animateScore(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / countDuration, 1);
+      const eased = 1 - Math.pow(1 - progress, 2);
+      setDisplayScore(Math.round(targetScore * eased));
+      if (progress < 1) animFrame = requestAnimationFrame(animateScore);
+    }
+    animFrame = requestAnimationFrame(animateScore);
+
+    // タイピングアニメーション（300ms後に開始）
+    const message = judgeResult.message || "";
+    let charIndex = 0;
+    let typingInterval;
+    const typingStart = setTimeout(() => {
+      typingInterval = setInterval(() => {
+        charIndex++;
+        setDisplayComment(message.slice(0, charIndex));
+        if (charIndex >= message.length) {
+          clearInterval(typingInterval);
+          setTypingDone(true);
+
+          if (judgeResult.ok) {
+            clearInterval(timerRef.current);
+            const { imageDataUrl, durationSec, comment: savedComment } = pendingRef.current || {};
+            setTimeout(() => {
+              onSuccess({ comment: savedComment || "", withEvidence: true, imageDataUrl, durationSec });
+            }, 800);
+          } else {
+            // 不合格：2秒後に通常画面に戻す
+            setTimeout(() => {
+              setJudgePhase(null);
+              setJudgeMsg("証拠として認められませんでした。やり直してください。");
+            }, 2000);
+          }
+        }
+      }, 35);
+    }, 300);
+
+    return () => {
+      cancelAnimationFrame(animFrame);
+      clearTimeout(typingStart);
+      clearInterval(typingInterval);
+    };
+  }, [judgePhase]); // judgeResultはjudgePhaseと同時にセットされるので依存不要
 
   // 課題が変わったらタイマーをリセット
   function resetTimerForNewTask(newTask) {
@@ -79,29 +146,26 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
 
   // 完了ボタン
   async function handleComplete() {
-    setJudging(true);
+    if (judgePhase !== null) return;
     setJudgeMsg("");
     const durationSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
 
     if (imageData) {
+      setJudgePhase("analyzing");
       const thumbnail = await resizeImage(imageData.base64, imageData.mediaType, 480);
       const r = await judgeEvidence({
         base64: thumbnail.split(",")[1],
         mediaType: "image/jpeg",
         taskText: task.text,
       });
-      setJudgeMsg(r.message);
-      if (r.ok) {
-        setTimeout(() => onSuccess({ comment, withEvidence: true, imageDataUrl: thumbnail, durationSec }), 800);
-        return;
-      }
-      setJudging(false);
+      pendingRef.current = { imageDataUrl: thumbnail, durationSec, comment };
+      setJudgeResult(r);
+      setJudgePhase("result");
       return;
     }
 
     if (!comment.trim()) {
       setJudgeMsg("コメントを入力するか、写真を提出してください");
-      setJudging(false);
       return;
     }
     onSuccess({ comment, withEvidence: false, imageDataUrl: null, durationSec });
@@ -111,12 +175,10 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
   async function handleReGacha(option) {
     if (localPoints < option.cost) return;
     setShowOptions(false);
-    // ポイントを先に消費
     setLocalPoints((p) => p - option.cost);
     await onSpendPoints?.(option.cost);
 
     if (Math.random() < option.prob) {
-      // 課題レベルをLv1へ下げて引き直し
       const pool = getTasksForHabit(habitId, 1);
       const newTask = pool[Math.floor(Math.random() * pool.length)];
       setTask(newTask);
@@ -139,6 +201,79 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
     onSuccess({ comment: "【救済】", withEvidence: false, imageDataUrl: null, durationSec, rescued: true });
   }
 
+  // ─── 解析中オーバーレイ ───
+  if (judgePhase === "analyzing") {
+    const label = AI_MODE.label;
+    return (
+      <div className="court-frame flex flex-col items-center justify-center gap-6">
+        <div className="w-14 h-14 border-4 border-court-gold border-t-transparent rounded-full animate-spin" />
+        <div className="text-center">
+          <p className="text-lg font-bold text-gray-200">
+            {label ? `${label} が解析中…` : "解析中…"}
+          </p>
+          <p className="text-xs text-gray-500 mt-2">画像が課題の証拠かどうか判定しています</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── 判定結果画面 ───
+  if (judgePhase === "result" && judgeResult) {
+    const scoreColor =
+      displayScore >= 80 ? "#f5b301"
+      : displayScore >= 60 ? "#4ade80"
+      : "#f87171";
+    const label = AI_MODE.label;
+
+    return (
+      <div className="court-frame flex flex-col items-center gap-5 py-8 text-center">
+        <div className="flex items-center gap-2">
+          <p className="text-xs tracking-widest font-bold text-court-gold">AI 画像判定</p>
+          {label && (
+            <span className="text-xs bg-court-gold/20 text-court-gold px-2 py-0.5 rounded-full">
+              ⚡ {label}
+            </span>
+          )}
+        </div>
+
+        {/* スコア */}
+        <div className="flex flex-col items-center">
+          <p
+            className="text-8xl font-extrabold font-mono leading-none tabular-nums"
+            style={{ color: scoreColor }}
+          >
+            {displayScore}
+          </p>
+          <p className="text-sm text-gray-400 mt-1">/ 100点</p>
+        </div>
+
+        {/* コメント */}
+        <div className="w-full bg-court-panel rounded-xl p-4 min-h-16 text-left">
+          <p className="text-sm leading-relaxed text-gray-200">
+            {displayComment}
+            {!typingDone && <span className="animate-pulse ml-0.5 text-court-gold">|</span>}
+          </p>
+        </div>
+
+        {/* 合否 */}
+        {typingDone && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            {judgeResult.ok ? (
+              <p className="text-court-gold font-bold text-lg">合格！課題達成</p>
+            ) : (
+              <p className="text-court-danger font-bold text-sm">証拠として認められませんでした</p>
+            )}
+          </motion.div>
+        )}
+      </div>
+    );
+  }
+
+  // ─── 通常画面 ───
   return (
     <div className="court-frame flex flex-col items-center gap-5 py-6">
       <div className="flex w-full justify-between items-center">
@@ -199,10 +334,10 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
 
       <button
         onClick={handleComplete}
-        disabled={judging}
+        disabled={judgePhase !== null}
         className="w-full px-6 py-4 bg-court-gold text-court-bg font-bold rounded-lg disabled:opacity-50"
       >
-        {judging ? "確認中…" : "完了する"}
+        完了する
       </button>
 
       {/* ポイント消費オプション */}
