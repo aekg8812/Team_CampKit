@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { motion, useAnimation } from "framer-motion";
 import { drawOmikuji } from "../data/omikuji";
 import { play } from "../lib/sound";
@@ -15,14 +15,9 @@ export default function OmikujiScreen({ onReveal, onComplete }) {
   const [result, setResult] = useState(null);
   const [shakeCount, setShakeCount] = useState(0);
   const controls = useAnimation();
-  const autoBackRef = useRef(null);
   // レースコンディション防止
   const isAnimatingRef = useRef(false);
   const revealedRef = useRef(false);
-
-  useEffect(() => {
-    return () => clearTimeout(autoBackRef.current);
-  }, []);
 
   async function handleShake() {
     // アニメーション中 / 結果表示済み / reveal フェーズ は何もしない
@@ -52,12 +47,7 @@ export default function OmikujiScreen({ onReveal, onComplete }) {
     const r = drawOmikuji();
     setResult(r);
     setPhase("reveal");
-    // 保存完了を待ってから5秒カウント開始
-    // （Supabaseが遅くても「戻ったら引けてしまう」を防ぐ）
     try { await onReveal?.(r); } catch {}
-    autoBackRef.current = setTimeout(() => {
-      onComplete?.();
-    }, 5000);
   }
 
   const remaining = REQUIRED_SHAKES - shakeCount;
@@ -152,7 +142,12 @@ export default function OmikujiScreen({ onReveal, onComplete }) {
         </motion.p>
       </motion.div>
 
-      <p className="text-xs text-gray-600 mt-4">5秒後にマイページへ戻ります…</p>
+      <button
+        onClick={onComplete}
+        className="mt-4 w-full px-6 py-4 bg-court-gold text-court-bg font-bold rounded-lg"
+      >
+        マイページへ戻る
+      </button>
     </div>
   );
 }
