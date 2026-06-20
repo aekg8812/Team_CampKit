@@ -163,10 +163,13 @@ export async function generateTasks({ habitId, habitLabel, level, answers }) {
 
     if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("invalid");
 
+    // penaltyLevel はレベルに応じたデフォルト値を割り当てる（AIは知らないため）
+    const defaultPenalty = level === 3 ? 8 : level === 2 ? 6 : 4;
     return parsed.slice(0, 3).map((item, i) => ({
       id: `ai-${habitId}-${level}-${i}-${Date.now()}`,
       text: typeof item === "string" ? item : item.text,
       level,
+      penaltyLevel: defaultPenalty,
     }));
   } catch {
     return getTasksForHabit(habitId, level);

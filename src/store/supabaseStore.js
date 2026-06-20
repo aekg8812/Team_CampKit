@@ -5,7 +5,6 @@
 
 import { supabase } from "../lib/supabase";
 
-// ユーザー名をメール形式に変換（Supabase Authはメール必須のため）
 function toEmail(username) {
   return `${username}@sabori-app.local`;
 }
@@ -17,6 +16,9 @@ function freshData() {
     successCount: 0,
     failCount: 0,
     history: [],
+    notifyEmail: null,
+    lastLoginAt: null,
+    emailLog: [],
   };
 }
 
@@ -29,12 +31,15 @@ function rowToData(row) {
     successCount: row.success_count || 0,
     failCount: row.fail_count || 0,
     history: row.history || [],
+    notifyEmail: row.notify_email || null,
+    lastLoginAt: row.last_login_at || null,
+    emailLog: row.email_log || [],
   };
 }
 
 // ───────── 認証 ─────────
 
-export async function registerSb(username, password) {
+export async function registerSb(username, password, notifyEmail) {
   const { data, error } = await supabase.auth.signUp({
     email: toEmail(username),
     password,
@@ -50,6 +55,8 @@ export async function registerSb(username, password) {
       success_count: 0,
       fail_count: 0,
       history: [],
+      notify_email: notifyEmail || null,
+      email_log: [],
     });
   }
   return { ok: true };
@@ -123,13 +130,22 @@ export async function saveSelectedHabitsSb(habitIds) {
   return current;
 }
 
-export async function recordResultSb({ habitId, taskText, result, comment }) {
+// 結果記録（成功/失敗）。imageData は縮小済み data URL or null
+export async function recordResultSb({ habitId, taskText, result, comment, imageData, durationSec }) {
   const uid = await getCurrentUidSb();
   if (!uid) return;
 
   const data = await getUserDataSb();
   const today = new Date().toISOString().slice(0, 10);
-  data.history.unshift({ date: today, habitId, taskText, result, comment: comment || "" });
+  data.history.unshift({
+    date: today,
+    habitId,
+    taskText,
+    result,
+    comment: comment || "",
+    imageData: imageData || null,
+    durationSec: durationSec ?? null,
+  });
 
   if (!data.habitStreaks[habitId]) {
     data.habitStreaks[habitId] = { current: 0, best: 0, level: 1 };
@@ -156,6 +172,28 @@ export async function recordResultSb({ habitId, taskText, result, comment }) {
   });
 
   return data;
+}
+
+// 最終ログイン時刻を現在時刻で更新する
+export async function updateLastLoginSb() {
+  const uid = await getCurrentUidSb();
+  if (!uid) return;
+  await supabase
+    .from("user_data")
+    .update({ last_login_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", uid);
+}
+
+// メール送信ログを追記する
+export async function addEmailLogSb(entry) {
+  const uid = await getCurrentUidSb();
+  if (!uid) return;
+  const data = await getUserDataSb();
+  const emailLog = [...(data.emailLog || []), entry];
+  await supabase
+    .from("user_data")
+    .update({ email_log: emailLog, updated_at: new Date().toISOString() })
+    .eq("id", uid);
 }
 
 function sbError(error) {

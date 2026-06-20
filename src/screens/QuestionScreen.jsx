@@ -1,7 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getQuestionsForHabit } from "../data/questionsByHabit";
 import { getHabit } from "../data/habits";
+import { play, stop } from "../lib/sound";
 
 export default function QuestionScreen({ selectedHabits, onComplete }) {
   // 選ばれたカテゴリからランダムで1つ選ぶ
@@ -15,6 +16,12 @@ export default function QuestionScreen({ selectedHabits, onComplete }) {
 
   const [current, setCurrent] = useState(0);
   const [answers, setAnswers] = useState([]);
+
+  // 質問画面BGM：入ったら再生、出たら停止
+  useEffect(() => {
+    play("bgm_question");
+    return () => stop("bgm_question");
+  }, []);
 
   function handleAnswer(optionIndex) {
     const newAnswers = [...answers, optionIndex];

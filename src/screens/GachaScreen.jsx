@@ -14,6 +14,12 @@ export default function GachaScreen({ candidates, onComplete }) {
   const [phase, setPhase] = useState("intro");
   const [displayIndex, setDisplayIndex] = useState(0);
 
+  // ガチャ画面BGM：入ったら再生、出たら停止
+  useEffect(() => {
+    play("bgm_gacha");
+    return () => stop("bgm_gacha");
+  }, []);
+
   useEffect(() => {
     const t = setTimeout(() => {
       setPhase("spin");

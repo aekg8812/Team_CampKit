@@ -1,7 +1,6 @@
 import { getHabit } from "../data/habits";
 import { isSupabaseMode } from "../store";
 
-// 成功/失敗の円グラフ（SVGで自作・ライブラリ不要）
 function PieChart({ success, fail }) {
   const total = success + fail;
   if (total === 0) {
@@ -12,7 +11,6 @@ function PieChart({ success, fail }) {
     );
   }
   const successRatio = success / total;
-  // 円弧の計算
   const r = 60;
   const cx = 80;
   const cy = 80;
@@ -22,16 +20,10 @@ function PieChart({ success, fail }) {
   return (
     <div className="flex items-center justify-center gap-6 py-2">
       <svg width="160" height="160" viewBox="0 0 160 160">
-        {/* 失敗（赤）を背景全周に */}
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e23636" strokeWidth="28" />
-        {/* 成功（緑）を上から重ねる */}
         <circle
-          cx={cx}
-          cy={cy}
-          r={r}
-          fill="none"
-          stroke="#4caf50"
-          strokeWidth="28"
+          cx={cx} cy={cy} r={r}
+          fill="none" stroke="#4caf50" strokeWidth="28"
           strokeDasharray={`${successLen} ${circumference}`}
           transform={`rotate(-90 ${cx} ${cy})`}
         />
@@ -56,7 +48,7 @@ function PieChart({ success, fail }) {
   );
 }
 
-export default function MyPageScreen({ username, data, onStart, onEditHabits, onLogout }) {
+export default function MyPageScreen({ username, data, onStart, onEditHabits, onLogout, onViewLog }) {
   const { successCount, failCount, habitStreaks, selectedHabits, history } = data;
 
   return (
@@ -72,13 +64,11 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
         {isSupabaseMode && <span className="ml-2 text-court-gold">[クラウド保存中]</span>}
       </p>
 
-      {/* 円グラフ */}
       <div className="bg-court-panel rounded-xl p-4">
         <p className="text-sm font-bold mb-1">総合成績</p>
         <PieChart success={successCount} fail={failCount} />
       </div>
 
-      {/* カテゴリ別ストリーク */}
       <div className="bg-court-panel rounded-xl p-4">
         <p className="text-sm font-bold mb-3">サボり癖別ストリーク</p>
         <div className="space-y-2">
@@ -90,9 +80,7 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
             const s = habitStreaks[id] || { current: 0, best: 0, level: 1 };
             return (
               <div key={id} className="flex items-center justify-between text-sm">
-                <span>
-                  {h.icon} {h.label}
-                </span>
+                <span>{h.icon} {h.label}</span>
                 <span className="text-court-gold">
                   連続{s.current}日
                   <span className="text-gray-500 text-xs ml-2">最高{s.best}日 / Lv{s.level}</span>
@@ -103,7 +91,7 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
         </div>
       </div>
 
-      {/* 履歴リスト */}
+      {/* 履歴リスト（タップで詳細表示） */}
       <div className="bg-court-panel rounded-xl p-4">
         <p className="text-sm font-bold mb-3">クリア履歴</p>
         <div className="space-y-1 max-h-48 overflow-y-auto">
@@ -111,11 +99,16 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
             <p className="text-xs text-gray-500">まだ履歴がありません</p>
           )}
           {history.slice(0, 20).map((h, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs">
+            <button
+              key={i}
+              onClick={() => onViewLog?.(h)}
+              className="w-full flex items-center gap-2 text-xs text-left px-2 py-1 rounded hover:bg-court-bg transition"
+            >
               <span>{h.result === "success" ? "✅" : "❌"}</span>
-              <span className="text-gray-400">{h.date}</span>
+              <span className="text-gray-400 shrink-0">{h.date}</span>
               <span className="truncate">{h.taskText}</span>
-            </div>
+              {h.imageData && <span className="shrink-0 text-court-gold">📷</span>}
+            </button>
           ))}
         </div>
       </div>
