@@ -3,17 +3,22 @@ import LoginScreen from "./screens/LoginScreen";
 import HabitSelectScreen from "./screens/HabitSelectScreen";
 import MyPageScreen from "./screens/MyPageScreen";
 import QuestionScreen from "./screens/QuestionScreen";
+import DiagnosisScreen from "./screens/DiagnosisScreen";
 import GachaScreen from "./screens/GachaScreen";
 import TaskScreen from "./screens/TaskScreen";
 import ResultScreen from "./screens/ResultScreen";
 
 import { getLoggedInUser, getUserData, recordResult, logout } from "./store";
+import { diagnoseAnswers, generateTasks } from "./lib/claude";
+import { getHabit } from "./data/habits";
+import { getQuestionsForHabit } from "./data/questionsByHabit";
 
 const S = {
   LOGIN: "login",
   HABIT_SELECT: "habit_select",
   MYPAGE: "mypage",
   QUESTION: "question",
+  DIAGNOSIS: "diagnosis",
   GACHA: "gacha",
   TASK: "task",
   RESULT: "result",
@@ -28,6 +33,10 @@ export default function App() {
   const [currentHabit, setCurrentHabit] = useState(null);
   const [currentTask, setCurrentTask] = useState(null);
   const [lastSuccess, setLastSuccess] = useState(false);
+
+  // AI機能用の状態
+  const [diagnosis, setDiagnosis] = useState(null);
+  const [taskCandidates, setTaskCandidates] = useState([]);
 
   // リロード時にログイン状態を復帰
   useEffect(() => {
@@ -44,7 +53,6 @@ export default function App() {
   async function loadData(u) {
     const d = await getUserData();
     setData(d);
-    // サボり癖が未選択なら選択画面、選択済みならマイページ
     if (!d.selectedHabits || d.selectedHabits.length === 0) {
       setScreen(S.HABIT_SELECT);
     } else {
@@ -70,9 +78,28 @@ export default function App() {
     setScreen(S.QUESTION);
   }
 
-  // 質問完了 → ガチャへ
-  function handleQuestionComplete({ habitId }) {
+  // 質問完了 → AI診断＆課題生成を並行実行 → 診断画面へ
+  async function handleQuestionComplete({ habitId, answers }) {
     setCurrentHabit(habitId);
+    setDiagnosis(null);
+    setTaskCandidates([]);
+    setScreen(S.DIAGNOSIS);
+
+    const habit = getHabit(habitId);
+    const questions = getQuestionsForHabit(habitId);
+    const level = data?.habitStreaks?.[habitId]?.level || 1;
+
+    const [diagText, candidates] = await Promise.all([
+      diagnoseAnswers({ habitId, habitLabel: habit.label, questions, answers }),
+      generateTasks({ habitId, habitLabel: habit.label, level, answers }),
+    ]);
+
+    setDiagnosis(diagText);
+    setTaskCandidates(candidates);
+  }
+
+  // 診断画面から課題（ガチャ）へ
+  function handleDiagnosisNext() {
     setScreen(S.GACHA);
   }
 
@@ -118,12 +145,6 @@ export default function App() {
     setScreen(S.LOGIN);
   }
 
-  // 現在のカテゴリのレベルを取得（ガチャに渡す）
-  function currentLevel() {
-    if (!data || !currentHabit) return 1;
-    return data.habitStreaks?.[currentHabit]?.level || 1;
-  }
-
   switch (screen) {
     case S.LOGIN:
       return <LoginScreen onLoggedIn={handleLoggedIn} />;
@@ -151,11 +172,17 @@ export default function App() {
           onComplete={handleQuestionComplete}
         />
       );
+    case S.DIAGNOSIS:
+      return (
+        <DiagnosisScreen
+          diagnosis={diagnosis}
+          onNext={handleDiagnosisNext}
+        />
+      );
     case S.GACHA:
       return (
         <GachaScreen
-          habitId={currentHabit}
-          level={currentLevel()}
+          candidates={taskCandidates}
           onComplete={handleGachaComplete}
         />
       );

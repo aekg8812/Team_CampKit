@@ -1,13 +1,14 @@
 import { useEffect, useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { play, stop } from "../lib/sound";
-import { getTasksForHabit, LEVEL_LABEL } from "../data/tasksByHabit";
+import { LEVEL_LABEL } from "../data/tasksByHabit";
 
-export default function GachaScreen({ habitId, level, onComplete }) {
-  const candidates = useMemo(() => getTasksForHabit(habitId, level), [habitId, level]);
+// candidates: [{ id, text, level }, ...] を props で受け取る
+export default function GachaScreen({ candidates, onComplete }) {
   const winner = useMemo(
     () => candidates[Math.floor(Math.random() * candidates.length)],
-    [candidates]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
 
   const [phase, setPhase] = useState("intro");
