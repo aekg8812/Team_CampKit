@@ -210,15 +210,33 @@ export default function App() {
     setScreen(S.OMIKUJI);
   }
 
-  // 結果が出た瞬間に呼ばれる（リロードしても当日分が保存される）
+  // 結果が出た瞬間に呼ばれる
   async function handleOmikujiReveal(result) {
-    const newData = await recordOmikuji(result.points);
-    if (newData) setData(newData);
+    const today = new Date().toISOString().slice(0, 10);
+    // 保存の成否に依存せず即座にUIを更新（ポイント・引いた日付を反映）
+    setData((prev) => prev ? {
+      ...prev,
+      points: (prev.points || 0) + (result.points || 0),
+      lastOmikujiDate: today,
+    } : prev);
+    // ストアへ永続化
+    try {
+      const newData = await recordOmikuji(result.points);
+      // 永続化が成功してlastOmikujiDateが入った場合のみ上書き
+      if (newData?.lastOmikujiDate) setData(newData);
+    } catch (e) {
+      console.error("[omikuji] persist failed:", e);
+    }
   }
 
-  // 5秒後のナビゲーション（データは handleOmikujiReveal で保存済み）
+  // 5秒後のナビゲーション
   async function handleOmikujiComplete() {
-    setData(await getUserData());
+    // handleOmikujiReveal で state は更新済み。
+    // ストアから再取得して reconcile するが、空データで上書きしない。
+    try {
+      const fresh = await getUserData();
+      if (fresh?.lastOmikujiDate) setData(fresh);
+    } catch {}
     setScreen(S.MYPAGE);
   }
 

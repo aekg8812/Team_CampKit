@@ -83,7 +83,7 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
               : "bg-gray-700 text-gray-500 cursor-not-allowed"
           }`}
         >
-          {canOmikuji ? "🎋 おみくじを引く" : "おみくじ\n明日また引けます"}
+          {canOmikuji ? "🎋 おみくじを引く" : <span className="text-xs leading-tight">おみくじ<br/>明日また引けます</span>}
         </button>
       </div>
 
