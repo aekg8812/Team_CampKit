@@ -3,6 +3,9 @@ import { motion, useAnimation } from "framer-motion";
 import { drawOmikuji } from "../data/omikuji";
 import { play } from "../lib/sound";
 
+// 必要タップ回数
+const REQUIRED_SHAKES = 3;
+
 // おみくじ画面
 // props:
 //   onComplete: (result: { result, points, color, comment }) => void
@@ -12,23 +15,32 @@ export default function OmikujiScreen({ onComplete }) {
   const [result, setResult] = useState(null);
   const [shakeCount, setShakeCount] = useState(0);
   const controls = useAnimation();
-  const autoRevealRef = useRef(null);
   const autoBackRef = useRef(null);
 
-  // 3秒後に自動で結果を出す
   useEffect(() => {
-    autoRevealRef.current = setTimeout(() => {
-      if (phase === "shake") reveal();
-    }, 3000);
-    return () => {
-      clearTimeout(autoRevealRef.current);
-      clearTimeout(autoBackRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => clearTimeout(autoBackRef.current);
   }, []);
 
+  async function handleShake() {
+    if (phase !== "shake") return;
+
+    play("omikuji_shake");
+    const newCount = shakeCount + 1;
+    setShakeCount(newCount);
+
+    await controls.start({
+      rotate: [0, -20, 20, -14, 14, -8, 8, 0],
+      transition: { duration: 0.5, ease: "easeInOut" },
+    });
+
+    // 3回目で結果へ
+    if (newCount >= REQUIRED_SHAKES) {
+      // 振り終わりのアニメーション完了後にめくる
+      setTimeout(() => reveal(), 200);
+    }
+  }
+
   function reveal() {
-    clearTimeout(autoRevealRef.current);
     play("omikuji_result");
     const r = drawOmikuji();
     setResult(r);
@@ -39,15 +51,7 @@ export default function OmikujiScreen({ onComplete }) {
     }, 5000);
   }
 
-  async function handleShake() {
-    if (phase !== "shake") return;
-    play("omikuji_shake");
-    setShakeCount((c) => c + 1);
-    await controls.start({
-      rotate: [0, -18, 18, -12, 12, -6, 6, 0],
-      transition: { duration: 0.5, ease: "easeInOut" },
-    });
-  }
+  const remaining = REQUIRED_SHAKES - shakeCount;
 
   if (phase === "shake") {
     return (
@@ -64,15 +68,26 @@ export default function OmikujiScreen({ onComplete }) {
           <p className="text-xs text-court-gold mt-2 font-bold">タップして振る</p>
         </motion.div>
 
-        {shakeCount > 0 && (
-          <div className="flex gap-1">
-            {Array.from({ length: Math.min(shakeCount, 7) }).map((_, i) => (
-              <span key={i} className="text-court-gold text-sm">★</span>
-            ))}
-          </div>
-        )}
+        {/* タップ済みインジケーター */}
+        <div className="flex gap-3 items-center">
+          {Array.from({ length: REQUIRED_SHAKES }).map((_, i) => (
+            <motion.span
+              key={i}
+              initial={{ scale: 0.5, opacity: 0.3 }}
+              animate={i < shakeCount ? { scale: 1, opacity: 1 } : { scale: 0.5, opacity: 0.3 }}
+              transition={{ type: "spring", stiffness: 300 }}
+              className="text-2xl"
+            >
+              ★
+            </motion.span>
+          ))}
+        </div>
 
-        <p className="text-xs text-gray-500">（3秒後に自動で結果が出ます）</p>
+        <p className="text-sm font-bold text-gray-300">
+          {remaining > 0
+            ? `あと${remaining}回振ってください`
+            : "振っています…"}
+        </p>
       </div>
     );
   }
