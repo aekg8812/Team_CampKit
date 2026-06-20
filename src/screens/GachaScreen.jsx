@@ -5,7 +5,6 @@ import { LEVEL_LABEL } from "../data/tasksByHabit";
 
 const ULTRA_STYLE = { label: "【激重】", color: "#ff2222", note: "覚悟しろ！！！" };
 
-// candidates: [{ id, text, level, penaltyLevel, isUltra? }, ...] を props で受け取る
 export default function GachaScreen({ candidates, onComplete }) {
   const winner = useMemo(
     () => candidates[Math.floor(Math.random() * candidates.length)],
@@ -16,7 +15,6 @@ export default function GachaScreen({ candidates, onComplete }) {
   const [phase, setPhase] = useState("intro");
   const [displayIndex, setDisplayIndex] = useState(0);
 
-  // ガチャ画面BGM：入ったら再生、出たら停止
   useEffect(() => {
     play("bgm_gacha");
     return () => stop("bgm_gacha");
@@ -58,11 +56,12 @@ export default function GachaScreen({ candidates, onComplete }) {
 
   if (phase === "intro") {
     return (
-      <div className="court-frame flex flex-col items-center justify-center text-center gap-4">
+      <div className="court-frame flex flex-col items-center justify-center text-center min-h-screen">
         <motion.p
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="text-2xl font-extrabold text-court-gold"
+          transition={{ duration: 0.4 }}
+          className="text-2xl font-extrabold text-court-gold tracking-wide"
         >
           今日の課題を決定します
         </motion.p>
@@ -77,15 +76,20 @@ export default function GachaScreen({ candidates, onComplete }) {
 
   return (
     <div
-      className={`court-frame flex flex-col items-center justify-center text-center gap-6 ${
+      className={`court-frame flex flex-col items-center justify-center text-center gap-6 min-h-screen ${
         stopped && (winner.level === 3 || winner.isUltra) ? "animate-shake" : ""
       }`}
     >
       <motion.div
         key={displayIndex}
-        animate={{ scale: stopped ? 1.12 : 1 }}
-        className="w-full py-10 px-6 rounded-2xl border-4"
-        style={{ borderColor: style.color, boxShadow: `0 0 36px ${style.color}55` }}
+        animate={{ scale: stopped ? 1.04 : 1 }}
+        transition={{ type: "spring", stiffness: 200 }}
+        className="w-full py-10 px-6 rounded-2xl border-2"
+        style={{
+          borderColor: style.color,
+          boxShadow: stopped ? `0 0 32px ${style.color}44` : `0 0 12px ${style.color}22`,
+          background: `${style.color}08`,
+        }}
       >
         <p className="text-xs tracking-widest mb-3 font-bold" style={{ color: style.color }}>
           {style.label}
@@ -95,11 +99,12 @@ export default function GachaScreen({ candidates, onComplete }) {
           <p className="text-xs text-red-400 mt-3 font-bold">⚠️ 激重課題発動！覚悟しろ！</p>
         )}
       </motion.div>
+
       {stopped && (
         <motion.p
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-sm"
+          className="text-sm font-bold"
           style={{ color: style.color }}
         >
           {style.note}

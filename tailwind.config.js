@@ -5,12 +5,14 @@ export default {
     extend: {
       colors: {
         court: {
-          bg: "#0d0b14", // 法廷の闇
-          panel: "#1a1626",
-          gold: "#d4af37", // 木槌・判決の金
-          danger: "#e23636", // 重刑の赤
-          mid: "#f5b301", // 中刑の黄
-          low: "#4caf50", // 軽刑の緑
+          bg:     "#09070f",
+          panel:  "#131020",
+          panel2: "#1c1830",
+          gold:   "#c9a227",
+          danger: "#dc3535",
+          mid:    "#f0a500",
+          low:    "#3dab42",
+          muted:  "#6b6882",
         },
       },
       fontFamily: {

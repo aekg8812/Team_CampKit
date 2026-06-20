@@ -2,38 +2,74 @@ import { motion } from "framer-motion";
 
 export default function ResultScreen({ success, onBackToMyPage }) {
   return (
-    <div className="court-frame flex flex-col items-center justify-center text-center gap-6">
+    <div className="court-frame flex flex-col items-center justify-center text-center gap-6 min-h-screen">
       {success ? (
         <>
-          <motion.h2
-            initial={{ scale: 0.5, opacity: 0 }}
+          <motion.div
+            initial={{ scale: 0.4, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 220, damping: 16 }}
+            className="text-7xl"
+          >
+            🎉
+          </motion.div>
+          <motion.h2
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
             className="text-3xl font-extrabold text-court-low"
           >
             達成！
           </motion.h2>
-          <p className="text-lg">今日のサボり癖を1つ乗り越えました</p>
-          <p className="text-sm text-gray-400">連続記録が伸びました</p>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+            className="bg-court-panel rounded-2xl px-6 py-4 text-sm text-court-muted leading-relaxed"
+          >
+            <p>今日のサボり癖を1つ乗り越えました</p>
+            <p className="mt-1">連続記録が更新されました 🔥</p>
+          </motion.div>
         </>
       ) : (
         <>
-          <motion.h2
-            initial={{ scale: 1.3, opacity: 0 }}
+          <motion.div
+            initial={{ scale: 1.4, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 200 }}
+            className="text-6xl"
+          >
+            ⏰
+          </motion.div>
+          <motion.h2
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
             className="text-3xl font-extrabold text-court-danger"
           >
             時間切れ
           </motion.h2>
-          <p className="text-sm text-gray-400">また明日チャレンジしましょう</p>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.35 }}
+            className="text-sm text-court-muted"
+          >
+            また明日チャレンジしましょう
+          </motion.p>
         </>
       )}
 
-      <button
+      <motion.button
         onClick={onBackToMyPage}
-        className="mt-4 px-8 py-3 bg-court-gold text-court-bg font-bold rounded-lg"
+        whileTap={{ scale: 0.97 }}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+        className="mt-4 px-10 py-4 bg-court-gold text-court-bg font-bold rounded-2xl"
       >
         マイページへ
-      </button>
+      </motion.button>
     </div>
   );
 }

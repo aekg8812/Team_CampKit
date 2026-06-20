@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import LoginScreen from "./screens/LoginScreen";
 import HabitSelectScreen from "./screens/HabitSelectScreen";
 import MyPageScreen from "./screens/MyPageScreen";
@@ -156,7 +157,11 @@ export default function App() {
       imageData: imageDataUrl || null,
       durationSec: durationSec || 0,
     });
-    setData(newData || (await getUserData()));
+    const freshData = newData || (await getUserData());
+    setData((prev) => ({
+      ...freshData,
+      lastOmikujiDate: freshData.lastOmikujiDate || prev?.lastOmikujiDate,
+    }));
     setLastSuccess(true);
     setScreen(S.RESULT);
   }
@@ -171,7 +176,10 @@ export default function App() {
       durationSec: durationSec || 0,
     });
     const latestData = newData || (await getUserData());
-    setData(latestData);
+    setData((prev) => ({
+      ...latestData,
+      lastOmikujiDate: latestData.lastOmikujiDate || prev?.lastOmikujiDate,
+    }));
 
     // 条件A: 全体の累積失敗回数が 3 の倍数に達したとき通知（多重送信防止付き）
     if (shouldSendPenaltyEmail(latestData)) {
@@ -241,7 +249,20 @@ export default function App() {
     setScreen(S.MYPAGE);
   }
 
-  return renderScreen();
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={screen}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -8 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        style={{ minHeight: "100dvh" }}
+      >
+        {renderScreen()}
+      </motion.div>
+    </AnimatePresence>
+  );
 
   function renderScreen() {
     switch (screen) {

@@ -5,7 +5,6 @@ import { getHabit } from "../data/habits";
 import { play, stop } from "../lib/sound";
 
 export default function QuestionScreen({ selectedHabits, onComplete }) {
-  // 選ばれたカテゴリからランダムで1つ選ぶ
   const chosenHabit = useMemo(() => {
     const pool = selectedHabits && selectedHabits.length > 0 ? selectedHabits : ["sabo"];
     return pool[Math.floor(Math.random() * pool.length)];
@@ -17,7 +16,6 @@ export default function QuestionScreen({ selectedHabits, onComplete }) {
   const [current, setCurrent] = useState(0);
   const [answers, setAnswers] = useState([]);
 
-  // 質問画面BGM：入ったら再生、出たら停止
   useEffect(() => {
     play("bgm_question");
     return () => stop("bgm_question");
@@ -27,7 +25,6 @@ export default function QuestionScreen({ selectedHabits, onComplete }) {
     const newAnswers = [...answers, optionIndex];
     setAnswers(newAnswers);
     if (current === questions.length - 1) {
-      // 回答の「悪さ」を集計して渡す
       const badness = newAnswers.reduce((s, idx) => s + idx, 0);
       onComplete({ habitId: chosenHabit, answers: newAnswers, badness });
       return;
@@ -37,33 +34,53 @@ export default function QuestionScreen({ selectedHabits, onComplete }) {
 
   const q = questions[current];
 
-  return (
-    <div className="court-frame flex flex-col">
-      <p className="text-xs text-court-gold tracking-widest mb-1">
-        {habit.icon} {habit.label}
-      </p>
-      <p className="text-xs text-gray-400 mb-6">
-        質問 {current + 1} / {questions.length}
-      </p>
+  // プログレスバー
+  const progress = (current / questions.length) * 100;
 
+  return (
+    <div className="court-frame flex flex-col gap-5 py-6">
+      {/* ヘッダー */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-bold">
+          {habit.icon} {habit.label}
+        </span>
+        <span className="text-xs text-court-muted">
+          {current + 1} / {questions.length}
+        </span>
+      </div>
+
+      {/* プログレスバー */}
+      <div className="w-full h-1 bg-court-panel rounded-full overflow-hidden">
+        <motion.div
+          className="h-full bg-court-gold rounded-full"
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.3 }}
+        />
+      </div>
+
+      {/* 質問エリア */}
       <AnimatePresence mode="wait">
         <motion.div
           key={current}
-          initial={{ opacity: 0, x: 30 }}
+          initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -30 }}
-          transition={{ duration: 0.25 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.22 }}
+          className="flex flex-col gap-4"
         >
-          <h2 className="text-xl font-bold mb-8 leading-relaxed">{q.q}</h2>
+          <h2 className="text-xl font-bold leading-relaxed min-h-[4rem]">{q.q}</h2>
+
           <div className="flex flex-col gap-3">
             {q.options.map((opt, i) => (
-              <button
+              <motion.button
                 key={i}
                 onClick={() => handleAnswer(i)}
-                className="text-left px-5 py-4 bg-court-panel rounded-lg border border-transparent hover:border-court-gold transition"
+                whileTap={{ scale: 0.97 }}
+                className="text-left px-5 py-4 bg-court-panel rounded-2xl border border-court-panel2 hover:border-court-gold hover:bg-court-panel2 transition-colors text-sm leading-relaxed"
               >
+                <span className="text-court-muted text-xs mr-2">{String.fromCharCode(65 + i)}.</span>
                 {opt}
-              </button>
+              </motion.button>
             ))}
           </div>
         </motion.div>

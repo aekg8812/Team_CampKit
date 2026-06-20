@@ -6,31 +6,22 @@ import { REGACHA_OPTIONS, RESCUE_COST } from "../data/levelProbability";
 import { judgeEvidence } from "../lib/claude";
 import { AI_MODE } from "../lib/ai/index";
 
-// 課題提示 + カウントダウン + 証拠提出（画像/コメント）+ 再ガチャ/救済
-// props:
-//   task         : { id, text, level, penaltyLevel, isUltra? }
-//   habitId      : string  (再ガチャ時に新課題を選ぶために必要)
-//   points       : number  (現在の保有ポイント)
-//   onSuccess    : ({ comment, withEvidence, imageDataUrl, durationSec, rescued? })
-//   onFail       : ({ durationSec })
-//   onSpendPoints: async (amount) => void
 export default function TaskScreen({ task: initialTask, habitId, points: initialPoints, onTaskChange, onSuccess, onFail, onSpendPoints }) {
   const [task, setTask] = useState(initialTask);
   const [localPoints, setLocalPoints] = useState(initialPoints || 0);
   const penaltySeconds = getPenaltySeconds(task.penaltyLevel);
   const [remaining, setRemaining] = useState(penaltySeconds);
   const [comment, setComment] = useState("");
-  const [imageData, setImageData] = useState(null); // { base64, mediaType, preview }
+  const [imageData, setImageData] = useState(null);
   const [judgeMsg, setJudgeMsg] = useState("");
   const [showOptions, setShowOptions] = useState(false);
 
-  // 画像判定フェーズ管理
-  const [judgePhase, setJudgePhase] = useState(null); // null | "analyzing" | "result"
-  const [judgeResult, setJudgeResult] = useState(null); // { ok, score, message }
+  const [judgePhase, setJudgePhase] = useState(null);
+  const [judgeResult, setJudgeResult] = useState(null);
   const [displayScore, setDisplayScore] = useState(0);
   const [displayComment, setDisplayComment] = useState("");
   const [typingDone, setTypingDone] = useState(false);
-  const pendingRef = useRef(null); // { imageDataUrl, durationSec, comment }
+  const pendingRef = useRef(null);
 
   const startTimeRef = useRef(Date.now());
   const timerRef = useRef(null);
@@ -38,7 +29,6 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
     ? { label: "【激重】", color: "#ff2222", note: "覚悟しろ！！！" }
     : LEVEL_LABEL[task.level] || LEVEL_LABEL[1];
 
-  // カウントダウン（課題提示からの経過時間）
   useEffect(() => {
     let secs = penaltySeconds;
     timerRef.current = setInterval(() => {
@@ -54,7 +44,6 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 判定結果のアニメーション
   useEffect(() => {
     if (judgePhase !== "result" || !judgeResult) return;
 
@@ -62,7 +51,6 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
     setDisplayComment("");
     setTypingDone(false);
 
-    // スコアカウントアップ（イーズアウト）
     const targetScore = judgeResult.score ?? 80;
     const countDuration = 1200;
     const startTime = performance.now();
@@ -76,7 +64,6 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
     }
     animFrame = requestAnimationFrame(animateScore);
 
-    // タイピングアニメーション（300ms後に開始）
     const message = judgeResult.message || "";
     let charIndex = 0;
     let typingInterval;
@@ -87,8 +74,6 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
         if (charIndex >= message.length) {
           clearInterval(typingInterval);
           setTypingDone(true);
-
-          // タイピング完了 → ボタンを表示するだけ（自動遷移しない）
         }
       }, 35);
     }, 300);
@@ -98,9 +83,8 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
       clearTimeout(typingStart);
       clearInterval(typingInterval);
     };
-  }, [judgePhase]); // judgeResultはjudgePhaseと同時にセットされるので依存不要
+  }, [judgePhase]);
 
-  // 課題が変わったらタイマーをリセット
   function resetTimerForNewTask(newTask) {
     clearInterval(timerRef.current);
     const newSecs = getPenaltySeconds(newTask.penaltyLevel);
@@ -118,7 +102,6 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
     }, 1000);
   }
 
-  // 画像選択
   function handleImage(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -132,7 +115,6 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
     reader.readAsDataURL(file);
   }
 
-  // 完了ボタン
   async function handleComplete() {
     if (judgePhase !== null) return;
     setJudgeMsg("");
@@ -159,7 +141,6 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
     onSuccess({ comment, withEvidence: false, imageDataUrl: null, durationSec });
   }
 
-  // ポイント消費で再ガチャ（確率でLv1へ引き下げ）
   async function handleReGacha(option) {
     if (localPoints < option.cost) return;
     setShowOptions(false);
@@ -170,17 +151,16 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
       const pool = getTasksForHabit(habitId, 1);
       const newTask = pool[Math.floor(Math.random() * pool.length)];
       setTask(newTask);
-      onTaskChange?.(newTask); // App側の currentTask も更新し、失敗記録のタスク名ズレを防ぐ
+      onTaskChange?.(newTask);
       setImageData(null);
       setComment("");
-      setJudgeMsg(`ラッキー！課題がLv1に変わりました`);
+      setJudgeMsg("ラッキー！課題がLv1に変わりました");
       resetTimerForNewTask(newTask);
     } else {
       setJudgeMsg(`惜しかった…課題は変わりませんでした（${option.cost}pt消費）`);
     }
   }
 
-  // 50pt消費で成功扱い救済
   async function handleRescue() {
     if (localPoints < RESCUE_COST) return;
     setLocalPoints((p) => p - RESCUE_COST);
@@ -190,34 +170,37 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
     onSuccess({ comment: "【救済】", withEvidence: false, imageDataUrl: null, durationSec, rescued: true });
   }
 
-  // ─── 解析中オーバーレイ ───
+  // ─── 解析中 ───
   if (judgePhase === "analyzing") {
     const label = AI_MODE.label;
     return (
-      <div className="court-frame flex flex-col items-center justify-center gap-6">
-        <div className="w-14 h-14 border-4 border-court-gold border-t-transparent rounded-full animate-spin" />
+      <div className="court-frame flex flex-col items-center justify-center gap-6 min-h-screen">
+        <div className="relative w-14 h-14">
+          <div className="absolute inset-0 rounded-full border-2 border-court-panel2" />
+          <div className="absolute inset-0 rounded-full border-2 border-court-gold border-t-transparent animate-spin" />
+        </div>
         <div className="text-center">
-          <p className="text-lg font-bold text-gray-200">
+          <p className="text-base font-bold">
             {label ? `${label} が解析中…` : "解析中…"}
           </p>
-          <p className="text-xs text-gray-500 mt-2">画像が課題の証拠かどうか判定しています</p>
+          <p className="text-xs text-court-muted mt-2">画像が課題の証拠かどうか判定しています</p>
         </div>
       </div>
     );
   }
 
-  // ─── 判定結果画面 ───
+  // ─── 判定結果 ───
   if (judgePhase === "result" && judgeResult) {
     const scoreColor =
-      displayScore >= 80 ? "#f5b301"
-      : displayScore >= 60 ? "#4ade80"
-      : "#f87171";
+      displayScore >= 80 ? "#c9a227"
+      : displayScore >= 60 ? "#3dab42"
+      : "#dc3535";
     const label = AI_MODE.label;
 
     return (
-      <div className="court-frame flex flex-col items-center gap-5 py-8 text-center">
+      <div className="court-frame flex flex-col items-center gap-5 py-8 text-center min-h-screen">
         <div className="flex items-center gap-2">
-          <p className="text-xs tracking-widest font-bold text-court-gold">AI 画像判定</p>
+          <p className="text-xs tracking-widest font-bold text-court-gold uppercase">AI 画像判定</p>
           {label && (
             <span className="text-xs bg-court-gold/20 text-court-gold px-2 py-0.5 rounded-full">
               ⚡ {label}
@@ -233,18 +216,17 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
           >
             {displayScore}
           </p>
-          <p className="text-sm text-gray-400 mt-1">/ 100点</p>
+          <p className="text-sm text-court-muted mt-1">/ 100点</p>
         </div>
 
         {/* コメント */}
-        <div className="w-full bg-court-panel rounded-xl p-4 min-h-16 text-left">
+        <div className="w-full bg-court-panel rounded-2xl p-5 text-left">
           <p className="text-sm leading-relaxed text-gray-200">
             {displayComment}
             {!typingDone && <span className="animate-pulse ml-0.5 text-court-gold">|</span>}
           </p>
         </div>
 
-        {/* 合否 + ボタン */}
         {typingDone && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -254,30 +236,32 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
           >
             {judgeResult.ok ? (
               <>
-                <p className="text-court-gold font-bold text-lg">合格！課題達成</p>
-                <button
+                <p className="text-court-gold font-bold">合格！課題達成</p>
+                <motion.button
                   onClick={() => {
                     clearInterval(timerRef.current);
                     const { imageDataUrl, durationSec, comment: savedComment } = pendingRef.current || {};
                     onSuccess({ comment: savedComment || "", withEvidence: true, imageDataUrl, durationSec });
                   }}
-                  className="w-full px-6 py-4 bg-court-gold text-court-bg font-bold rounded-lg text-lg"
+                  whileTap={{ scale: 0.97 }}
+                  className="w-full py-4 bg-court-gold text-court-bg font-bold rounded-2xl text-lg"
                 >
                   結果を確定する
-                </button>
+                </motion.button>
               </>
             ) : (
               <>
                 <p className="text-court-danger font-bold text-sm">証拠として認められませんでした</p>
-                <button
+                <motion.button
                   onClick={() => {
                     setJudgePhase(null);
                     setJudgeMsg("証拠として認められませんでした。やり直してください。");
                   }}
-                  className="w-full px-6 py-4 bg-court-panel border border-gray-600 text-gray-300 font-bold rounded-lg"
+                  whileTap={{ scale: 0.97 }}
+                  className="w-full py-4 bg-court-panel border border-court-panel2 text-gray-300 font-bold rounded-2xl"
                 >
                   やり直す
-                </button>
+                </motion.button>
               </>
             )}
           </motion.div>
@@ -288,42 +272,53 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
 
   // ─── 通常画面 ───
   return (
-    <div className="court-frame flex flex-col items-center gap-5 py-6">
-      <div className="flex w-full justify-between items-center">
-        <p className="text-sm text-gray-400">今日の課題</p>
-        <p className="text-xs text-court-gold font-bold">{localPoints}pt</p>
+    <div className="court-frame flex flex-col gap-4 py-5">
+      {/* ヘッダー: ポイント */}
+      <div className="flex justify-between items-center">
+        <p className="text-xs text-court-muted font-semibold uppercase tracking-widest">今日の課題</p>
+        <span className="text-xs text-court-gold font-bold bg-court-panel px-3 py-1 rounded-full">
+          {localPoints}pt
+        </span>
       </div>
 
+      {/* 課題カード */}
       <div
-        className={`w-full py-6 px-4 rounded-xl border-2 text-center ${task.isUltra ? "animate-pulse" : ""}`}
-        style={{ borderColor: style.color, boxShadow: task.isUltra ? `0 0 24px ${style.color}88` : undefined }}
+        className={`w-full py-7 px-5 rounded-2xl border text-center ${task.isUltra ? "animate-pulse" : ""}`}
+        style={{
+          borderColor: style.color,
+          background: `${style.color}0a`,
+          boxShadow: task.isUltra ? `0 0 20px ${style.color}66` : undefined,
+        }}
       >
-        <p className="text-xs mb-2 font-bold" style={{ color: style.color }}>
+        <p className="text-xs mb-2 font-bold uppercase tracking-widest" style={{ color: style.color }}>
           {style.label}
         </p>
-        <p className="text-2xl font-extrabold">{task.text}</p>
+        <p className="text-xl font-extrabold leading-relaxed">{task.text}</p>
         {task.isUltra && (
-          <p className="text-xs text-red-400 mt-2 font-bold">⚠️ 激重課題が出た！覚悟を決めろ！</p>
+          <p className="text-xs text-red-400 mt-3 font-bold">⚠️ 激重課題が出た！覚悟を決めろ！</p>
         )}
       </div>
 
-      <p className="text-4xl font-mono tracking-wider">{formatTime(remaining)}</p>
-      <p className="text-xs text-gray-500 -mt-3">制限時間内に達成しよう</p>
+      {/* タイマー */}
+      <div className="bg-court-panel rounded-2xl py-5 px-4 text-center">
+        <p className="text-4xl font-mono tracking-wider font-bold">{formatTime(remaining)}</p>
+        <p className="text-xs text-court-muted mt-2">制限時間内に達成しよう</p>
+      </div>
 
       {/* 証拠提出 */}
-      <div className="w-full bg-court-panel rounded-xl p-4 flex flex-col gap-3">
-        <p className="text-sm font-bold">証拠を提出（任意）</p>
+      <div className="bg-court-panel rounded-2xl p-4 flex flex-col gap-3">
+        <p className="text-xs text-court-muted font-semibold uppercase tracking-widest">証拠を提出（任意）</p>
 
         {imageData ? (
           <div className="flex flex-col items-center gap-2">
-            <img src={imageData.preview} alt="証拠" className="max-h-40 rounded-lg object-contain" />
-            <button onClick={() => setImageData(null)} className="text-xs text-gray-400 underline">
+            <img src={imageData.preview} alt="証拠" className="max-h-40 rounded-xl object-contain" />
+            <button onClick={() => setImageData(null)} className="text-xs text-court-muted underline">
               画像を取り消す
             </button>
           </div>
         ) : (
-          <label className="px-4 py-3 bg-court-bg rounded-lg text-center text-sm cursor-pointer border border-gray-700">
-            写真を撮る / 選ぶ
+          <label className="py-3 bg-court-panel2 rounded-xl text-center text-sm cursor-pointer border border-court-panel2 hover:border-court-gold transition-colors">
+            📷 写真を撮る / 選ぶ
             <input
               type="file"
               accept="image/*"
@@ -335,7 +330,7 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
         )}
 
         <textarea
-          className="px-3 py-2 bg-court-bg rounded-lg text-sm border border-gray-700 outline-none focus:border-court-gold resize-none"
+          className="px-3 py-2.5 bg-court-panel2 rounded-xl text-sm border border-court-panel2 outline-none focus:border-court-gold resize-none transition-colors placeholder:text-court-muted"
           rows={2}
           placeholder="一言コメント（写真なしの場合は必須）"
           value={comment}
@@ -343,56 +338,66 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
         />
       </div>
 
-      {judgeMsg && <p className="text-sm text-court-mid text-center">{judgeMsg}</p>}
+      {judgeMsg && (
+        <p className="text-sm text-court-mid text-center bg-court-mid/10 rounded-xl px-4 py-2">
+          {judgeMsg}
+        </p>
+      )}
 
-      <button
+      <motion.button
         onClick={handleComplete}
         disabled={judgePhase !== null}
-        className="w-full px-6 py-4 bg-court-gold text-court-bg font-bold rounded-lg disabled:opacity-50"
+        whileTap={{ scale: 0.97 }}
+        className="w-full py-4 bg-court-gold text-court-bg font-bold rounded-2xl text-base disabled:opacity-50"
       >
         完了する
-      </button>
+      </motion.button>
 
       {/* ポイント消費オプション */}
-      <div className="w-full">
+      <div>
         <button
           onClick={() => setShowOptions((v) => !v)}
-          className="w-full text-xs text-gray-500 underline py-1"
+          className="w-full text-xs text-court-muted py-1.5 hover:text-white transition-colors"
         >
-          {showOptions ? "オプションを閉じる" : "ポイントを使う（再ガチャ / 救済）"}
+          {showOptions ? "▲ オプションを閉じる" : "▼ ポイントを使う（再ガチャ / 救済）"}
         </button>
 
         {showOptions && (
-          <div className="bg-court-panel rounded-xl p-4 flex flex-col gap-3 mt-2">
-            <p className="text-xs text-gray-400">現在 {localPoints}pt 保有</p>
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-court-panel rounded-2xl p-4 flex flex-col gap-3 mt-2"
+          >
+            <p className="text-xs text-court-muted">現在 {localPoints}pt 保有</p>
 
             <p className="text-xs font-bold text-gray-300">再ガチャ（確率でLv1に変更）</p>
             {REGACHA_OPTIONS.map((opt) => (
-              <button
+              <motion.button
                 key={opt.cost}
                 onClick={() => handleReGacha(opt)}
                 disabled={localPoints < opt.cost}
-                className="px-4 py-2 bg-court-bg border border-gray-600 rounded-lg text-xs text-left disabled:opacity-40"
+                whileTap={{ scale: 0.97 }}
+                className="px-4 py-2.5 bg-court-panel2 border border-court-panel2 rounded-xl text-xs text-left disabled:opacity-40 hover:border-court-gold transition-colors"
               >
                 {opt.label}
-              </button>
+              </motion.button>
             ))}
 
-            <div className="border-t border-gray-700 pt-3">
-              <p className="text-xs font-bold text-gray-300 mb-2">救済（{RESCUE_COST}pt — 成功扱い）</p>
-              <p className="text-xs text-gray-500 mb-2">
-                課題を履歴に「???」として登録し、成功扱いにします。
-                連続成功カウントに含まれます。
+            <div className="border-t border-court-panel2 pt-3">
+              <p className="text-xs font-bold text-gray-300 mb-1">救済（{RESCUE_COST}pt — 成功扱い）</p>
+              <p className="text-xs text-court-muted mb-3">
+                課題を「???」として登録し、成功扱いにします。連続成功カウントに含まれます。
               </p>
-              <button
+              <motion.button
                 onClick={handleRescue}
                 disabled={localPoints < RESCUE_COST}
-                className="w-full px-4 py-2 bg-court-mid text-white rounded-lg text-xs font-bold disabled:opacity-40"
+                whileTap={{ scale: 0.97 }}
+                className="w-full py-2.5 bg-court-mid text-court-bg rounded-xl text-xs font-bold disabled:opacity-40"
               >
                 {RESCUE_COST}ptで救済する
-              </button>
+              </motion.button>
             </div>
-          </div>
+          </motion.div>
         )}
       </div>
     </div>
@@ -406,7 +411,6 @@ function formatTime(s) {
   return `${h}:${m}:${sec}`;
 }
 
-// 証拠画像をサムネイルにリサイズして data URL で返す（容量削減）
 function resizeImage(base64, mediaType, maxPx = 480) {
   return new Promise((resolve) => {
     const img = new Image();
