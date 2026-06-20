@@ -22,10 +22,11 @@ export default function ResultScreen({ success, onBackToMyPage }) {
             達成！
           </motion.h2>
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="bg-court-panel rounded-2xl px-6 py-4 text-sm text-court-muted leading-relaxed"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 280, damping: 26, delay: 0.35 }}
+            className="bg-court-panel rounded-3xl px-6 py-5 text-sm text-gray-300 leading-relaxed"
+            style={{ boxShadow: "0 4px 28px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06)" }}
           >
             <p>今日のサボり癖を1つ乗り越えました</p>
             <p className="mt-1">連続記録が更新されました 🔥</p>
@@ -66,7 +67,8 @@ export default function ResultScreen({ success, onBackToMyPage }) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
-        className="mt-4 px-10 py-4 bg-court-gold text-court-bg font-bold rounded-2xl"
+        className="mt-4 px-10 py-4 bg-court-gold text-court-bg font-bold rounded-3xl"
+        style={{ boxShadow: "0 4px 20px rgba(201,162,39,0.3)" }}
       >
         マイページへ
       </motion.button>

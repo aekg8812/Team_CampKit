@@ -220,7 +220,7 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
         </div>
 
         {/* コメント */}
-        <div className="w-full bg-court-panel rounded-2xl p-5 text-left">
+        <div className="w-full bg-court-panel rounded-3xl p-5 text-left">
           <p className="text-sm leading-relaxed text-gray-200">
             {displayComment}
             {!typingDone && <span className="animate-pulse ml-0.5 text-court-gold">|</span>}
@@ -244,7 +244,8 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
                     onSuccess({ comment: savedComment || "", withEvidence: true, imageDataUrl, durationSec });
                   }}
                   whileTap={{ scale: 0.97 }}
-                  className="w-full py-4 bg-court-gold text-court-bg font-bold rounded-2xl text-lg"
+                  className="w-full py-4 bg-court-gold text-court-bg font-bold rounded-3xl text-lg"
+                  style={{ boxShadow: "0 4px 20px rgba(201,162,39,0.35)" }}
                 >
                   結果を確定する
                 </motion.button>
@@ -258,7 +259,7 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
                     setJudgeMsg("証拠として認められませんでした。やり直してください。");
                   }}
                   whileTap={{ scale: 0.97 }}
-                  className="w-full py-4 bg-court-panel border border-court-panel2 text-gray-300 font-bold rounded-2xl"
+                  className="w-full py-4 bg-court-panel border border-court-panel2 text-gray-300 font-bold rounded-3xl"
                 >
                   やり直す
                 </motion.button>
@@ -283,7 +284,7 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
 
       {/* 課題カード */}
       <div
-        className={`w-full py-7 px-5 rounded-2xl border text-center ${task.isUltra ? "animate-pulse" : ""}`}
+        className={`w-full py-7 px-5 rounded-3xl border text-center ${task.isUltra ? "animate-pulse" : ""}`}
         style={{
           borderColor: style.color,
           background: `${style.color}0a`,
@@ -300,13 +301,13 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
       </div>
 
       {/* タイマー */}
-      <div className="bg-court-panel rounded-2xl py-5 px-4 text-center">
+      <div className="bg-court-panel rounded-3xl py-5 px-4 text-center">
         <p className="text-4xl font-mono tracking-wider font-bold">{formatTime(remaining)}</p>
         <p className="text-xs text-court-muted mt-2">制限時間内に達成しよう</p>
       </div>
 
       {/* 証拠提出 */}
-      <div className="bg-court-panel rounded-2xl p-4 flex flex-col gap-3">
+      <div className="bg-court-panel rounded-3xl p-4 flex flex-col gap-3">
         <p className="text-xs text-court-muted font-semibold uppercase tracking-widest">証拠を提出（任意）</p>
 
         {imageData ? (
@@ -348,7 +349,8 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
         onClick={handleComplete}
         disabled={judgePhase !== null}
         whileTap={{ scale: 0.97 }}
-        className="w-full py-4 bg-court-gold text-court-bg font-bold rounded-2xl text-base disabled:opacity-50"
+        className="w-full py-4 bg-court-gold text-court-bg font-bold rounded-3xl text-base disabled:opacity-50"
+        style={{ boxShadow: "0 4px 20px rgba(201,162,39,0.3)" }}
       >
         完了する
       </motion.button>
@@ -366,7 +368,7 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-court-panel rounded-2xl p-4 flex flex-col gap-3 mt-2"
+            className="bg-court-panel rounded-3xl p-4 flex flex-col gap-3 mt-2"
           >
             <p className="text-xs text-court-muted">現在 {localPoints}pt 保有</p>
 

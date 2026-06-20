@@ -31,10 +31,11 @@ export default function DiagnosisScreen({ diagnosis, onNext }) {
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35 }}
-            className="bg-court-panel rounded-2xl p-6"
+            transition={{ type: "spring", stiffness: 280, damping: 26 }}
+            className="bg-court-panel rounded-3xl p-6"
+            style={{ boxShadow: "0 4px 28px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)" }}
           >
-            <p className="text-base leading-relaxed">{diagnosis}</p>
+            <p className="text-base leading-relaxed text-gray-200">{diagnosis}</p>
             {aiLabel && (
               <p className="text-xs text-court-muted text-right mt-4">⚡ {aiLabel} 診断</p>
             )}
@@ -43,10 +44,11 @@ export default function DiagnosisScreen({ diagnosis, onNext }) {
           <motion.button
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.45 }}
+            transition={{ delay: 0.4 }}
             onClick={onNext}
             whileTap={{ scale: 0.97 }}
-            className="w-full py-4 bg-court-gold text-court-bg font-bold rounded-2xl"
+            className="w-full py-4 bg-court-gold text-court-bg font-bold rounded-3xl"
+            style={{ boxShadow: "0 4px 20px rgba(201,162,39,0.3)" }}
           >
             課題へ進む
           </motion.button>

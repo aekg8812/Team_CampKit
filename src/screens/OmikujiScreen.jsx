@@ -132,7 +132,8 @@ export default function OmikujiScreen({ onReveal, onComplete }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.8 }}
-          className="bg-court-panel rounded-2xl px-6 py-4 mx-2"
+          className="bg-court-panel rounded-3xl px-6 py-4 mx-2"
+          style={{ boxShadow: "0 4px 28px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06)" }}
         >
           <p className="text-sm text-gray-300 leading-relaxed">{result.comment}</p>
         </motion.div>
@@ -144,7 +145,8 @@ export default function OmikujiScreen({ onReveal, onComplete }) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 1.0 }}
-        className="mt-2 w-full px-6 py-4 bg-court-gold text-court-bg font-bold rounded-2xl"
+        className="mt-2 w-full px-6 py-4 bg-court-gold text-court-bg font-bold rounded-3xl"
+        style={{ boxShadow: "0 4px 20px rgba(201,162,39,0.3)" }}
       >
         マイページへ戻る
       </motion.button>

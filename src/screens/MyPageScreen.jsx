@@ -3,6 +3,10 @@ import { motion, useReducedMotion } from "framer-motion";
 import { getHabit } from "../data/habits";
 import { isSupabaseMode } from "../store";
 
+const spring = { type: "spring", stiffness: 280, damping: 26 };
+const cardShadow = "0 4px 28px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)";
+const goldGlow   = "0 4px 20px rgba(201,162,39,0.28)";
+
 // 数値カウントアップ
 function AnimCount({ value }) {
   const [display, setDisplay] = useState(value);
@@ -12,8 +16,7 @@ function AnimCount({ value }) {
   useEffect(() => {
     if (shouldReduce) { setDisplay(value); prevRef.current = value; return; }
     const start = prevRef.current;
-    const end = value;
-    const diff = end - start;
+    const diff = value - start;
     if (diff === 0) return;
     const dur = Math.min(700, Math.abs(diff) * 30 + 200);
     const t0 = performance.now();
@@ -36,9 +39,13 @@ function PieChart({ success, fail }) {
   const total = success + fail;
   const shouldReduce = useReducedMotion();
 
-  if (total === 0) return (
-    <div className="flex items-center justify-center h-20 text-court-muted text-xs">まだ記録なし</div>
-  );
+  if (total === 0) {
+    return (
+      <div className="flex items-center justify-center h-20 text-court-muted text-xs">
+        まだ記録なし
+      </div>
+    );
+  }
 
   const ratio = success / total;
   const r = 36, cx = 44, cy = 44;
@@ -48,13 +55,18 @@ function PieChart({ success, fail }) {
   return (
     <div className="flex flex-col items-center gap-2">
       <svg width="88" height="88" viewBox="0 0 88 88">
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#dc3535" strokeWidth="14" />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#dc353540" strokeWidth="14" />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#dc3535" strokeWidth="14"
+          strokeDasharray={`${circ * (1 - ratio)} ${circ}`}
+          strokeDashoffset={circ * ratio}
+          transform={`rotate(-90 ${cx} ${cy})`}
+        />
         <motion.circle
           cx={cx} cy={cy} r={r}
           fill="none" stroke="#3dab42" strokeWidth="14"
           strokeDasharray="0 999"
           animate={{ strokeDasharray: `${len} ${circ}` }}
-          transition={{ duration: shouldReduce ? 0 : 0.9, delay: 0.15, ease: "easeOut" }}
+          transition={{ duration: shouldReduce ? 0 : 1.0, delay: 0.2, ease: "easeOut" }}
           transform={`rotate(-90 ${cx} ${cy})`}
         />
         <text x={cx} y={cy - 3} textAnchor="middle" fill="#f0edf5" fontSize="16" fontWeight="bold">
@@ -74,29 +86,9 @@ function PieChart({ success, fail }) {
   );
 }
 
-// Bentoカードラッパー
-function BentoCard({ className = "", children, onClick }) {
-  if (onClick) {
-    return (
-      <motion.button
-        onClick={onClick}
-        whileTap={{ scale: 0.97 }}
-        className={`bg-court-panel rounded-2xl p-4 text-left w-full ${className}`}
-      >
-        {children}
-      </motion.button>
-    );
-  }
-  return (
-    <div className={`bg-court-panel rounded-2xl p-4 ${className}`}>
-      {children}
-    </div>
-  );
-}
-
 const fadeUp = {
-  hidden: { opacity: 0, y: 10 },
-  show:   { opacity: 1, y: 0 },
+  hidden: { opacity: 0, y: 14 },
+  show:   { opacity: 1, y: 0, transition: { type: "spring", stiffness: 280, damping: 26 } },
 };
 
 export default function MyPageScreen({ username, data, onStart, onEditHabits, onLogout, onViewLog, onOmikuji }) {
@@ -117,18 +109,19 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
         <div>
           <p className="text-base font-bold">{username}</p>
           {isSupabaseMode && (
-            <p className="text-xs text-court-gold">クラウド同期中</p>
+            <p className="text-xs text-court-gold">☁ クラウド同期中</p>
           )}
         </div>
-        <button
+        <motion.button
           onClick={onLogout}
-          className="text-xs text-court-muted hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-court-panel"
+          whileTap={{ scale: 0.95 }}
+          className="text-xs text-gray-400 border border-white/15 rounded-xl px-3 py-1.5 hover:border-white/30 hover:text-white transition-colors"
         >
           ログアウト
-        </button>
+        </motion.button>
       </div>
 
-      {/* Bento グリッド row1: Points (left tall) + Stats/Total (right) */}
+      {/* Bento row1: Points (left tall) + Stats / Total (right) */}
       <motion.div
         className="flex gap-3"
         variants={stagger}
@@ -138,25 +131,27 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
         {/* Left: Points + おみくじ */}
         <motion.div
           variants={fadeUp}
-          className="bg-court-panel rounded-2xl p-4 flex flex-col justify-between flex-1"
+          className="bg-court-panel rounded-3xl p-5 flex flex-col justify-between flex-1"
+          style={{ boxShadow: cardShadow }}
         >
           <div>
             <p className="text-xs text-court-muted font-semibold uppercase tracking-widest mb-3">Points</p>
             <p className="text-5xl font-extrabold text-court-gold leading-none tabular-nums">
               <AnimCount value={points} />
             </p>
-            <p className="text-xs text-court-muted mt-1">ポイント</p>
+            <p className="text-xs text-court-muted mt-1.5">ポイント</p>
           </div>
 
           <motion.button
             onClick={canOmikuji ? onOmikuji : undefined}
             disabled={!canOmikuji}
-            whileTap={canOmikuji ? { scale: 0.94 } : undefined}
-            className={`mt-5 w-full py-2.5 rounded-xl text-sm font-bold transition-colors ${
+            whileTap={canOmikuji ? { scale: 0.93 } : undefined}
+            className={`mt-5 w-full py-3 rounded-2xl text-sm font-bold transition-opacity ${
               canOmikuji
-                ? "bg-court-gold text-court-bg hover:opacity-90"
-                : "bg-court-panel2 text-court-muted cursor-not-allowed"
+                ? "bg-court-gold text-court-bg"
+                : "bg-court-panel2 text-gray-500 cursor-not-allowed"
             }`}
+            style={canOmikuji ? { boxShadow: goldGlow } : undefined}
           >
             {canOmikuji
               ? "🎋 おみくじを引く"
@@ -164,16 +159,22 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
           </motion.button>
         </motion.div>
 
-        {/* Right column: Stats + Total */}
+        {/* Right: Stats + Total */}
         <div className="flex flex-col gap-3 flex-1">
-          {/* Stats */}
-          <motion.div variants={fadeUp} className="bg-court-panel rounded-2xl p-4 flex flex-col items-center">
+          <motion.div
+            variants={fadeUp}
+            className="bg-court-panel rounded-3xl p-4 flex flex-col items-center"
+            style={{ boxShadow: cardShadow }}
+          >
             <p className="text-xs text-court-muted font-semibold uppercase tracking-widest mb-2 self-start">Stats</p>
             <PieChart success={successCount} fail={failCount} />
           </motion.div>
 
-          {/* Total challenge count */}
-          <motion.div variants={fadeUp} className="bg-court-panel rounded-2xl p-4">
+          <motion.div
+            variants={fadeUp}
+            className="bg-court-panel rounded-3xl p-4"
+            style={{ boxShadow: cardShadow }}
+          >
             <p className="text-xs text-court-muted font-semibold uppercase tracking-widest mb-1">Total</p>
             <p className="text-2xl font-extrabold tabular-nums">
               <AnimCount value={successCount + failCount} />
@@ -185,17 +186,18 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
 
       {/* Streaks */}
       <motion.div
-        className="bg-court-panel rounded-2xl p-4"
+        className="bg-court-panel rounded-3xl p-5"
         variants={fadeUp}
         initial="hidden"
         animate="show"
-        transition={{ delay: shouldReduce ? 0 : 0.18 }}
+        transition={{ ...spring, delay: shouldReduce ? 0 : 0.18 }}
+        style={{ boxShadow: cardShadow }}
       >
         <p className="text-xs text-court-muted font-semibold uppercase tracking-widest mb-3">Streaks</p>
         {selectedHabits.length === 0 ? (
           <p className="text-xs text-court-muted">サボり癖が未選択です</p>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {selectedHabits.map((id) => {
               const h = getHabit(id);
               const raw = habitStreaks[id] || {};
@@ -206,7 +208,7 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
                 <div key={id} className="flex items-center justify-between">
                   <span className="text-sm">
                     {h.icon}{" "}
-                    <span className="text-court-muted text-xs">{h.label}</span>
+                    <span className="text-gray-300 text-sm">{h.label}</span>
                   </span>
                   <div className="text-right shrink-0 ml-2">
                     <span className="text-court-gold font-bold text-sm tabular-nums">
@@ -227,20 +229,22 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
       <motion.button
         onClick={onStart}
         whileTap={{ scale: 0.97 }}
-        className="w-full py-5 bg-court-gold text-court-bg font-extrabold rounded-2xl text-lg tracking-wide"
-        initial={{ opacity: 0, y: 8 }}
+        className="w-full py-5 bg-court-gold text-court-bg font-extrabold rounded-3xl text-lg tracking-wide"
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: shouldReduce ? 0 : 0.25 }}
+        transition={{ ...spring, delay: shouldReduce ? 0 : 0.22 }}
+        style={{ boxShadow: "0 6px 28px rgba(201,162,39,0.35)" }}
       >
         今日の課題を始める →
       </motion.button>
 
       {/* 履歴 */}
       <motion.div
-        className="bg-court-panel rounded-2xl p-4"
+        className="bg-court-panel rounded-3xl p-5"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: shouldReduce ? 0 : 0.3 }}
+        transition={{ ...spring, delay: shouldReduce ? 0 : 0.28 }}
+        style={{ boxShadow: cardShadow }}
       >
         <p className="text-xs text-court-muted font-semibold uppercase tracking-widest mb-3">History</p>
         <div className="space-y-1 max-h-52 overflow-y-auto -mx-1 px-1">
@@ -265,12 +269,17 @@ export default function MyPageScreen({ username, data, onStart, onEditHabits, on
         </div>
       </motion.div>
 
-      <button
+      {/* サボり癖を編集する — 視認性の高いセカンダリボタン */}
+      <motion.button
         onClick={onEditHabits}
-        className="text-xs text-court-muted underline text-center py-1 hover:text-white transition-colors"
+        whileTap={{ scale: 0.97 }}
+        className="w-full py-3 text-sm text-gray-300 border border-white/20 rounded-2xl hover:border-court-gold hover:text-court-gold transition-colors"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: shouldReduce ? 0 : 0.33 }}
       >
         サボり癖を編集する
-      </button>
+      </motion.button>
     </div>
   );
 }

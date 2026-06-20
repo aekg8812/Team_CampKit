@@ -83,8 +83,8 @@ export default function GachaScreen({ candidates, onComplete }) {
       <motion.div
         key={displayIndex}
         animate={{ scale: stopped ? 1.04 : 1 }}
-        transition={{ type: "spring", stiffness: 200 }}
-        className="w-full py-10 px-6 rounded-2xl border-2"
+        transition={{ type: "spring", stiffness: 240, damping: 22 }}
+        className="w-full py-10 px-6 rounded-3xl border-2"
         style={{
           borderColor: style.color,
           boxShadow: stopped ? `0 0 32px ${style.color}44` : `0 0 12px ${style.color}22`,
