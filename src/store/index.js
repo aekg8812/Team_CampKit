@@ -1,8 +1,6 @@
 // ========================================
 // 統一ストア：画面はここだけを呼ぶ
 // VITE_USE_SUPABASE の値でローカル版/Supabase版を振り分ける
-//   false（既定）→ ローカルストレージ（確実に動く）
-//   true          → Supabase（クラウド保存）
 // ========================================
 
 import * as L from "./localStore";
@@ -10,14 +8,13 @@ import * as S from "./supabaseStore";
 
 const USE_SB = import.meta.env.VITE_USE_SUPABASE === "true";
 
-// 現在ログイン中のユーザー名を保持（ローカル版で使う）
 let currentUsername = USE_SB ? null : L.getSessionLocal();
 
 // ───────── 認証 ─────────
 
-export async function register(username, password) {
-  if (USE_SB) return await S.registerSb(username, password);
-  return L.registerLocal(username, password);
+export async function register(username, password, notifyEmail) {
+  if (USE_SB) return await S.registerSb(username, password, notifyEmail);
+  return L.registerLocal(username, password, notifyEmail);
 }
 
 export async function login(username, password) {
@@ -42,7 +39,6 @@ export async function logout() {
   currentUsername = null;
 }
 
-// 既にログイン済みか（リロード復帰用）※ Supabase版は async
 export async function getLoggedInUser() {
   if (USE_SB) return await S.getCurrentUsernameSb();
   return currentUsername;
@@ -65,5 +61,16 @@ export async function recordResult(payload) {
   return L.recordResultLocal(currentUsername, payload);
 }
 
-// いまSupabaseモードかどうか（UI表示用）
+// 最終ログイン時刻を現在時刻で更新する
+export async function updateLastLogin() {
+  if (USE_SB) return await S.updateLastLoginSb();
+  return L.updateLastLoginLocal(currentUsername);
+}
+
+// メール送信ログを追記する
+export async function addEmailLog(entry) {
+  if (USE_SB) return await S.addEmailLogSb(entry);
+  return L.addEmailLogLocal(currentUsername, entry);
+}
+
 export const isSupabaseMode = USE_SB;

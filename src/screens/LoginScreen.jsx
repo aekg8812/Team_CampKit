@@ -6,6 +6,7 @@ export default function LoginScreen({ onLoggedIn }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
+  const [notifyEmail, setNotifyEmail] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -22,16 +23,21 @@ export default function LoginScreen({ onLoggedIn }) {
     setBusy(true);
 
     if (mode === "register") {
-      const r = await register(username, password);
+      if (!notifyEmail || !notifyEmail.includes("@")) {
+        setError("通知先メールアドレス（第三者）を正しく入力してください");
+        setBusy(false);
+        return;
+      }
+      const r = await register(username, password, notifyEmail);
       if (!r.ok) {
         setError(r.error);
         setBusy(false);
         return;
       }
-      // 登録後はログイン画面へ
       setMode("login");
       setPassword("");
       setPassword2("");
+      setNotifyEmail("");
       setError("登録できました。ログインしてください");
       setBusy(false);
       return;
@@ -92,6 +98,21 @@ export default function LoginScreen({ onLoggedIn }) {
           value={password2}
           onChange={(e) => setPassword2(e.target.value)}
         />
+      )}
+
+      {mode === "register" && (
+        <div className="flex flex-col gap-1">
+          <input
+            type="email"
+            className="px-4 py-3 rounded-lg bg-court-panel border border-gray-700 focus:border-court-gold outline-none"
+            placeholder="通知先メールアドレス（必須）"
+            value={notifyEmail}
+            onChange={(e) => setNotifyEmail(e.target.value)}
+          />
+          <p className="text-xs text-gray-500 px-1">
+            ※ サボったとき通知が届く第三者（親・友人・上司など）のアドレスを入力してください
+          </p>
+        </div>
       )}
 
       {error && <p className="text-sm text-center text-court-mid">{error}</p>}

@@ -1,25 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LEVEL_LABEL } from "../data/tasksByHabit";
+import { getPenaltySeconds } from "../data/penaltyTime";
 import { judgeEvidence } from "../lib/claude";
 
 // 課題提示 + カウントダウン + 証拠提出（画像/コメント）
+// props:
+//   task       : { id, text, level, penaltyLevel }
+//   onSuccess  : ({ comment, withEvidence, imageDataUrl, durationSec })
+//   onFail     : ({ durationSec })
 export default function TaskScreen({ task, onSuccess, onFail }) {
-  const [remaining, setRemaining] = useState(secondsUntilMidnight());
+  const penaltySeconds = getPenaltySeconds(task.penaltyLevel);
+  const [remaining, setRemaining] = useState(penaltySeconds);
   const [comment, setComment] = useState("");
   const [imageData, setImageData] = useState(null); // { base64, mediaType, preview }
   const [judging, setJudging] = useState(false);
   const [judgeMsg, setJudgeMsg] = useState("");
 
+  const startTimeRef = useRef(Date.now());
   const style = LEVEL_LABEL[task.level];
 
-  // カウントダウン
+  // カウントダウン（課題提示からの経過時間）
   useEffect(() => {
+    let secs = penaltySeconds;
     const timer = setInterval(() => {
-      const s = secondsUntilMidnight();
-      setRemaining(s);
-      if (s <= 0) {
+      secs -= 1;
+      setRemaining(Math.max(0, secs));
+      if (secs <= 0) {
         clearInterval(timer);
-        onFail();
+        const durationSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        onFail({ durationSec });
       }
     }, 1000);
     return () => clearInterval(timer);
@@ -32,7 +41,7 @@ export default function TaskScreen({ task, onSuccess, onFail }) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const result = reader.result; // data:image/xxx;base64,....
+      const result = reader.result;
       const base64 = result.split(",")[1];
       const mediaType = file.type || "image/jpeg";
       setImageData({ base64, mediaType, preview: result });
@@ -40,34 +49,35 @@ export default function TaskScreen({ task, onSuccess, onFail }) {
     reader.readAsDataURL(file);
   }
 
-  // 完了ボタン（画像があれば判定、なければ自己申告）
+  // 完了ボタン
   async function handleComplete() {
     setJudging(true);
     setJudgeMsg("");
+    const durationSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
 
     if (imageData) {
+      // 画像をサムネイルにリサイズしてから判定・保存
+      const thumbnail = await resizeImage(imageData.base64, imageData.mediaType, 480);
       const r = await judgeEvidence({
-        base64: imageData.base64,
-        mediaType: imageData.mediaType,
+        base64: thumbnail.split(",")[1],
+        mediaType: "image/jpeg",
         taskText: task.text,
       });
       setJudgeMsg(r.message);
       if (r.ok) {
-        setTimeout(() => onSuccess({ comment, withEvidence: true }), 800);
+        setTimeout(() => onSuccess({ comment, withEvidence: true, imageDataUrl: thumbnail, durationSec }), 800);
         return;
       }
-      // NG時は再提出を促す
       setJudging(false);
       return;
     }
 
-    // 画像なし＝自己申告（コメント必須）
     if (!comment.trim()) {
       setJudgeMsg("コメントを入力するか、写真を提出してください");
       setJudging(false);
       return;
     }
-    onSuccess({ comment, withEvidence: false });
+    onSuccess({ comment, withEvidence: false, imageDataUrl: null, durationSec });
   }
 
   return (
@@ -84,7 +94,7 @@ export default function TaskScreen({ task, onSuccess, onFail }) {
       </div>
 
       <p className="text-4xl font-mono tracking-wider">{formatTime(remaining)}</p>
-      <p className="text-xs text-gray-500 -mt-3">今日中（23:59まで）に達成しよう</p>
+      <p className="text-xs text-gray-500 -mt-3">制限時間内に達成しよう</p>
 
       {/* 証拠提出 */}
       <div className="w-full bg-court-panel rounded-xl p-4 flex flex-col gap-3">
@@ -139,16 +149,26 @@ export default function TaskScreen({ task, onSuccess, onFail }) {
   );
 }
 
-function secondsUntilMidnight() {
-  const now = new Date();
-  const midnight = new Date(now);
-  midnight.setHours(23, 59, 0, 0);
-  return Math.max(0, Math.floor((midnight - now) / 1000));
-}
-
 function formatTime(s) {
   const h = String(Math.floor(s / 3600)).padStart(2, "0");
   const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
   const sec = String(s % 60).padStart(2, "0");
   return `${h}:${m}:${sec}`;
+}
+
+// 証拠画像をサムネイルにリサイズして data URL で返す（容量削減）
+function resizeImage(base64, mediaType, maxPx = 480) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.7));
+    };
+    img.onerror = () => resolve(`data:${mediaType};base64,${base64}`);
+    img.src = `data:${mediaType};base64,${base64}`;
+  });
 }

@@ -1,48 +1,134 @@
 // ========================================
-// カテゴリ別・レベル別の課題（ペナルティ）データ
+// カテゴリ別・レベル別の課題データ
 // レベル1（軽い）→ レベル3（重い）
-// 成功するとそのカテゴリのレベルが上がり、より重い課題が出る
+// penaltyLevel 1〜10 で制限時間を制御する（penaltyTime.js 参照）
+//   低め（1〜4）: 一度やれば終わる短時間作業
+//   高め（7〜10）: 一日を通して守る・翌朝確認など長期課題
 // ========================================
 
 export const TASKS_BY_HABIT = {
   sns: {
-    1: ["寝る1時間前にスマホを置く", "通知を3時間オフにする", "SNSアプリを1時間開かない"],
-    2: ["今夜のスクリーンタイムを2時間以内に", "夕食中はスマホを別室に置く", "寝室にスマホを持ち込まない"],
-    3: ["今日の残り時間スマホを30分以内に", "SNSアプリを1日封印する", "デジタルデトックス半日"],
+    1: [
+      { text: "寝る1時間前にスマホを置く",       penaltyLevel: 9 },
+      { text: "通知を3時間オフにする",            penaltyLevel: 7 },
+      { text: "SNSアプリを1時間開かない",         penaltyLevel: 5 },
+    ],
+    2: [
+      { text: "今夜のスクリーンタイムを2時間以内に", penaltyLevel: 10 },
+      { text: "夕食中はスマホを別室に置く",         penaltyLevel: 8 },
+      { text: "寝室にスマホを持ち込まない",          penaltyLevel: 9 },
+    ],
+    3: [
+      { text: "今日の残り時間スマホを30分以内に",  penaltyLevel: 10 },
+      { text: "SNSアプリを1日封印する",           penaltyLevel: 10 },
+      { text: "デジタルデトックス半日",            penaltyLevel: 9  },
+    ],
   },
   room: {
-    1: ["机の上を5分片付ける", "床の物を3つ片付ける", "ゴミを1袋まとめる"],
-    2: ["1部屋に掃除機をかける", "散らかった一角を完全に片付ける", "洗濯物を畳んでしまう"],
-    3: ["部屋全体を掃除する", "不要な物を10個処分する", "水回りを掃除する"],
+    1: [
+      { text: "机の上を5分片付ける",         penaltyLevel: 4 },
+      { text: "床の物を3つ片付ける",          penaltyLevel: 3 },
+      { text: "ゴミを1袋まとめる",            penaltyLevel: 3 },
+    ],
+    2: [
+      { text: "1部屋に掃除機をかける",        penaltyLevel: 4 },
+      { text: "散らかった一角を完全に片付ける", penaltyLevel: 5 },
+      { text: "洗濯物を畳んでしまう",          penaltyLevel: 4 },
+    ],
+    3: [
+      { text: "部屋全体を掃除する",            penaltyLevel: 6 },
+      { text: "不要な物を10個処分する",        penaltyLevel: 5 },
+      { text: "水回りを掃除する",              penaltyLevel: 5 },
+    ],
   },
   exercise: {
-    1: ["スクワット10回", "5分散歩する", "ストレッチ5分"],
-    2: ["腹筋20回", "外を15分歩く", "スクワット20回"],
-    3: ["腹筋30回", "30分のウォーキング", "筋トレ3種目"],
+    1: [
+      { text: "スクワット10回",   penaltyLevel: 4 },
+      { text: "5分散歩する",     penaltyLevel: 4 },
+      { text: "ストレッチ5分",   penaltyLevel: 3 },
+    ],
+    2: [
+      { text: "腹筋20回",         penaltyLevel: 4 },
+      { text: "外を15分歩く",     penaltyLevel: 4 },
+      { text: "スクワット20回",   penaltyLevel: 4 },
+    ],
+    3: [
+      { text: "腹筋30回",         penaltyLevel: 4 },
+      { text: "30分のウォーキング", penaltyLevel: 5 },
+      { text: "筋トレ3種目",       penaltyLevel: 5 },
+    ],
   },
   sabo: {
-    1: ["積んでる本を5ページ読む", "ToDoを1つ片付ける", "5分だけ着手する"],
-    2: ["積んでる本を15ページ読む", "後回しタスクを2つ片付ける", "30分集中して進める"],
-    3: ["一番避けてるタスクを終わらせる", "本を1章読み切る", "溜めた作業を1時間進める"],
+    1: [
+      { text: "積んでる本を5ページ読む",  penaltyLevel: 4 },
+      { text: "ToDoを1つ片付ける",       penaltyLevel: 5 },
+      { text: "5分だけ着手する",          penaltyLevel: 3 },
+    ],
+    2: [
+      { text: "積んでる本を15ページ読む",  penaltyLevel: 5 },
+      { text: "後回しタスクを2つ片付ける", penaltyLevel: 6 },
+      { text: "30分集中して進める",        penaltyLevel: 5 },
+    ],
+    3: [
+      { text: "一番避けてるタスクを終わらせる", penaltyLevel: 8 },
+      { text: "本を1章読み切る",              penaltyLevel: 7 },
+      { text: "溜めた作業を1時間進める",       penaltyLevel: 6 },
+    ],
   },
   human: {
-    1: ["未読のメッセージに1件返信", "1人に近況を送る", "お礼を1件伝える"],
-    2: ["溜まった連絡に3件返信", "気まずくて放置してた人に連絡", "謝りたかった件を片付ける"],
-    3: ["未読を全部返す", "ずっと連絡してない人に電話", "返信の墓場を一掃する"],
+    1: [
+      { text: "未読のメッセージに1件返信", penaltyLevel: 4 },
+      { text: "1人に近況を送る",           penaltyLevel: 4 },
+      { text: "お礼を1件伝える",           penaltyLevel: 3 },
+    ],
+    2: [
+      { text: "溜まった連絡に3件返信",           penaltyLevel: 5 },
+      { text: "気まずくて放置してた人に連絡",     penaltyLevel: 5 },
+      { text: "謝りたかった件を片付ける",         penaltyLevel: 5 },
+    ],
+    3: [
+      { text: "未読を全部返す",             penaltyLevel: 6 },
+      { text: "ずっと連絡してない人に電話", penaltyLevel: 6 },
+      { text: "返信の墓場を一掃する",       penaltyLevel: 7 },
+    ],
   },
   morning: {
-    1: ["明日アラームを1回で起きる", "今日0時前に布団に入る", "夜更かしを30分減らす"],
-    2: ["明日いつもより30分早く起きる", "23時までに就寝", "二度寝せず起きる"],
-    3: ["明日いつもより1時間早く起きる", "22時就寝・6時起床", "朝活を1つやる"],
+    1: [
+      { text: "明日アラームを1回で起きる",  penaltyLevel: 10 },
+      { text: "今日0時前に布団に入る",      penaltyLevel: 10 },
+      { text: "夜更かしを30分減らす",       penaltyLevel: 9  },
+    ],
+    2: [
+      { text: "明日いつもより30分早く起きる", penaltyLevel: 10 },
+      { text: "23時までに就寝",              penaltyLevel: 9  },
+      { text: "二度寝せず起きる",            penaltyLevel: 10 },
+    ],
+    3: [
+      { text: "明日いつもより1時間早く起きる", penaltyLevel: 10 },
+      { text: "22時就寝・6時起床",            penaltyLevel: 10 },
+      { text: "朝活を1つやる",               penaltyLevel: 10 },
+    ],
   },
   meal: {
-    1: ["今日コップ1杯多く水を飲む", "間食を1回我慢する", "野菜を1品足す"],
-    2: ["今日1食を自炊する", "夜食を抜く", "バランスの取れた食事を1回"],
-    3: ["今日3食すべて自炊する", "ジャンクフードを1日断つ", "栄養を考えた献立を作る"],
+    1: [
+      { text: "今日コップ1杯多く水を飲む",   penaltyLevel: 8 },
+      { text: "間食を1回我慢する",            penaltyLevel: 8 },
+      { text: "野菜を1品足す",               penaltyLevel: 7 },
+    ],
+    2: [
+      { text: "今日1食を自炊する",            penaltyLevel: 7 },
+      { text: "夜食を抜く",                   penaltyLevel: 9 },
+      { text: "バランスの取れた食事を1回",    penaltyLevel: 7 },
+    ],
+    3: [
+      { text: "今日3食すべて自炊する",        penaltyLevel: 10 },
+      { text: "ジャンクフードを1日断つ",      penaltyLevel: 10 },
+      { text: "栄養を考えた献立を作る",       penaltyLevel: 7  },
+    ],
   },
 };
 
-// 難易度ラベル（世界観なしのニュートラル表現）
+// 難易度ラベル（色・テキスト）
 export const LEVEL_LABEL = {
   1: { label: "レベル1", color: "#4caf50", note: "まずはここから" },
   2: { label: "レベル2", color: "#f5b301", note: "少しずつ強化" },
@@ -50,13 +136,15 @@ export const LEVEL_LABEL = {
 };
 
 // カテゴリとレベルから課題候補を返す（ガチャ用に複数返す）
+// 返り値: [{ id, text, level, penaltyLevel }, ...]
 export function getTasksForHabit(habitId, level) {
   const byHabit = TASKS_BY_HABIT[habitId] || TASKS_BY_HABIT.sabo;
   const lv = Math.max(1, Math.min(3, level || 1));
-  const texts = byHabit[lv] || byHabit[1];
-  return texts.map((text, i) => ({
+  const tasks = byHabit[lv] || byHabit[1];
+  return tasks.map((task, i) => ({
     id: `${habitId}-${lv}-${i}`,
-    text,
+    text: task.text,
     level: lv,
+    penaltyLevel: task.penaltyLevel,
   }));
 }
