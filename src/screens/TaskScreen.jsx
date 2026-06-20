@@ -88,19 +88,7 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
           clearInterval(typingInterval);
           setTypingDone(true);
 
-          if (judgeResult.ok) {
-            clearInterval(timerRef.current);
-            const { imageDataUrl, durationSec, comment: savedComment } = pendingRef.current || {};
-            setTimeout(() => {
-              onSuccess({ comment: savedComment || "", withEvidence: true, imageDataUrl, durationSec });
-            }, 800);
-          } else {
-            // 不合格：2秒後に通常画面に戻す
-            setTimeout(() => {
-              setJudgePhase(null);
-              setJudgeMsg("証拠として認められませんでした。やり直してください。");
-            }, 2000);
-          }
+          // タイピング完了 → ボタンを表示するだけ（自動遷移しない）
         }
       }, 35);
     }, 300);
@@ -255,17 +243,41 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
           </p>
         </div>
 
-        {/* 合否 */}
+        {/* 合否 + ボタン */}
         {typingDone && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
+            className="w-full flex flex-col items-center gap-3"
           >
             {judgeResult.ok ? (
-              <p className="text-court-gold font-bold text-lg">合格！課題達成</p>
+              <>
+                <p className="text-court-gold font-bold text-lg">合格！課題達成</p>
+                <button
+                  onClick={() => {
+                    clearInterval(timerRef.current);
+                    const { imageDataUrl, durationSec, comment: savedComment } = pendingRef.current || {};
+                    onSuccess({ comment: savedComment || "", withEvidence: true, imageDataUrl, durationSec });
+                  }}
+                  className="w-full px-6 py-4 bg-court-gold text-court-bg font-bold rounded-lg text-lg"
+                >
+                  結果を確定する
+                </button>
+              </>
             ) : (
-              <p className="text-court-danger font-bold text-sm">証拠として認められませんでした</p>
+              <>
+                <p className="text-court-danger font-bold text-sm">証拠として認められませんでした</p>
+                <button
+                  onClick={() => {
+                    setJudgePhase(null);
+                    setJudgeMsg("証拠として認められませんでした。やり直してください。");
+                  }}
+                  className="w-full px-6 py-4 bg-court-panel border border-gray-600 text-gray-300 font-bold rounded-lg"
+                >
+                  やり直す
+                </button>
+              </>
             )}
           </motion.div>
         )}
