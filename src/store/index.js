@@ -91,4 +91,10 @@ export async function recordPenaltyEmailSent(failCount) {
   return L.recordPenaltyEmailSentLocal(currentUsername, failCount);
 }
 
+// 過去バグで failedTasks に混入した undefined / 空文字を一度だけ掃除する
+export async function cleanupFailedTasks() {
+  if (USE_SB) return await S.cleanupFailedTasksSb();
+  return L.cleanupFailedTasksLocal(currentUsername);
+}
+
 export const isSupabaseMode = USE_SB;

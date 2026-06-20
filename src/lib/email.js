@@ -15,8 +15,14 @@ import { supabase } from "./supabase";
  */
 export async function sendPenaltyEmail({ toEmail, targetName, failedTasks = [], failCount }) {
   try {
+    // 過去データに混入した undefined / 空文字を本文から除外する
+    const cleanTasks = (failedTasks || []).filter(
+      (t) => typeof t === "string" && t.trim() && t !== "undefined"
+    );
+    // [診断ログ] 動作確認用：実際に送るタスク名を確認する（確認後に削除）
+    console.log("[email] sendPenaltyEmail payload:", { failCount, cleanTasks });
     await supabase.functions.invoke("send-penalty-email", {
-      body: { toEmail, targetName, failedTasks, failCount, type: 1 },
+      body: { toEmail, targetName, failedTasks: cleanTasks, failCount, type: 1 },
     });
   } catch (e) {
     console.error("[email] sendPenaltyEmail failed:", e);

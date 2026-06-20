@@ -86,10 +86,13 @@ export async function generateTasks({ habitId, habitLabel, level }) {
   const parsed = JSON.parse(clean);
   if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("invalid response");
   const defaultPenalty = level === 3 ? 8 : level === 2 ? 6 : 4;
-  return parsed.slice(0, 3).map((item, i) => ({
+  const tasks = parsed.slice(0, 3).map((item, i) => ({
     id: `ai-gemini-${habitId}-${level}-${i}-${Date.now()}`,
-    text: typeof item === "string" ? item : item.text,
+    text: typeof item === "string" ? item : item?.text,
     level,
     penaltyLevel: defaultPenalty,
-  }));
+  })).filter((t) => typeof t.text === "string" && t.text.trim());
+  // text を持たない項目が全滅したら固定データへフォールバックさせる
+  if (tasks.length === 0) throw new Error("no valid task text");
+  return tasks;
 }

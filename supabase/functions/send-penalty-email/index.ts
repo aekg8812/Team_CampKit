@@ -14,7 +14,7 @@ serve(async (req) => {
     const requestData = await req.json()
 
     // 👇 ここにステップ2でコピーしたGASのURLを貼り付ける！
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbzmLk9B6k6qyykqP1BoXUHZ2zlUqP6WYcvhwB-nDwGlxR3Tgu3JvMRo1ccSSsNYJuqn3Q/exec'
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbxdu9Eg9jBVUTY-PkSYulCS1Ps_Qp6oQ_cfnCqaLb7gUi4KHmynMrARTmTZIkxUO7YR6w/exec'
 
     const res = await fetch(GAS_URL, {
       method: 'POST',

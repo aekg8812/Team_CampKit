@@ -13,7 +13,7 @@ import OmikujiScreen from "./screens/OmikujiScreen";
 import {
   getLoggedInUser, getUserData, recordResult, logout,
   updateLastLogin, addEmailLog, spendPoints, recordOmikuji,
-  recordPenaltyEmailSent,
+  recordPenaltyEmailSent, cleanupFailedTasks,
 } from "./store";
 import { diagnoseAnswers, generateTasks } from "./lib/claude";
 import {
@@ -64,6 +64,7 @@ export default function App() {
   }, []);
 
   async function loadData(u) {
+    await cleanupFailedTasks(); // 過去の undefined 混入をログイン時に一度だけ掃除
     const d = await getUserData();
 
     // 条件B: 最終ログ記録から72時間以上経過していたら通知
@@ -282,6 +283,7 @@ export default function App() {
             task={currentTask}
             habitId={currentHabit}
             points={data?.points || 0}
+            onTaskChange={setCurrentTask}
             onSuccess={handleTaskSuccess}
             onFail={handleTaskFail}
             onSpendPoints={handleSpendPoints}

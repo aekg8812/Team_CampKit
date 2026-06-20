@@ -133,10 +133,14 @@ export function recordResultLocal(username, { habitId, taskText, result, comment
   const data = getUserDataLocal(username);
   const today = new Date().toISOString().slice(0, 10);
 
+  // taskText 欠落時に "undefined" が記録されるのを防ぐ
+  const safeTaskText =
+    typeof taskText === "string" && taskText.trim() ? taskText : "（無題のタスク）";
+
   data.history.unshift({
     date: today,
     habitId,
-    taskText,
+    taskText: safeTaskText,
     result,
     comment: comment || "",
     imageData: imageData || null,
@@ -175,7 +179,7 @@ export function recordResultLocal(username, { habitId, taskText, result, comment
     s.currentStreak = 0;
     s.level = 1; // 1回でも失敗したらLv1にリセット
     data.failedTasks = data.failedTasks || [];
-    data.failedTasks.push(taskText);
+    data.failedTasks.push(safeTaskText);
   }
 
   data.habitStreaks[habitId] = s;
@@ -221,6 +225,35 @@ export function recordPenaltyEmailSentLocal(username, failCount) {
   data.emailLog.push({ sentAt: new Date().toISOString(), reason: "fail", failCountAtSend: failCount });
   setUserDataLocal(username, data);
   return data;
+}
+
+// 過去バグで混入した undefined / 空文字を一度だけ掃除する
+// 対象: failedTasks 配列 と history 各エントリの taskText
+export function cleanupFailedTasksLocal(username) {
+  const data = getUserDataLocal(username);
+  let changed = false;
+
+  // failedTasks: 不正な値は除外する
+  const original = data.failedTasks || [];
+  const cleaned = original.filter(
+    (t) => typeof t === "string" && t.trim() && t !== "undefined"
+  );
+  if (cleaned.length !== original.length) {
+    data.failedTasks = cleaned;
+    changed = true;
+  }
+
+  // history: taskText が欠けた過去エントリは非表示にする（除外）
+  const origHist = data.history || [];
+  const histCleaned = origHist.filter(
+    (h) => typeof h.taskText === "string" && h.taskText.trim() && h.taskText !== "undefined"
+  );
+  if (histCleaned.length !== origHist.length) {
+    data.history = histCleaned;
+    changed = true;
+  }
+
+  if (changed) setUserDataLocal(username, data); // 変化なしなら書き戻さない
 }
 
 // おみくじ結果を記録し、ポイントを加算する

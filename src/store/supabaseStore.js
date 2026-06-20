@@ -173,10 +173,14 @@ export async function recordResultSb({ habitId, taskText, result, comment, image
   const data = await getUserDataSb();
   const today = new Date().toISOString().slice(0, 10);
 
+  // taskText 欠落時に "undefined" が記録されるのを防ぐ
+  const safeTaskText =
+    typeof taskText === "string" && taskText.trim() ? taskText : "（無題のタスク）";
+
   data.history.unshift({
     date: today,
     habitId,
-    taskText,
+    taskText: safeTaskText,
     result,
     comment: comment || "",
     imageData: imageData || null,
@@ -213,7 +217,7 @@ export async function recordResultSb({ habitId, taskText, result, comment, image
     s.currentStreak = 0;
     s.level = 1;
     data.failedTasks = data.failedTasks || [];
-    data.failedTasks.push(taskText);
+    data.failedTasks.push(safeTaskText);
   }
 
   data.habitStreaks[habitId] = s;
@@ -293,6 +297,39 @@ export async function recordPenaltyEmailSentSb(failCount) {
     })
     .eq("id", uid);
   return { ...data, lastPenaltyFailCount: failCount, emailLog };
+}
+
+// 過去バグで混入した undefined / 空文字を一度だけ掃除する
+// 対象: failed_tasks 配列 と history 各エントリの taskText
+export async function cleanupFailedTasksSb() {
+  const uid = await getCurrentUidSb();
+  if (!uid) return;
+  const data = await getUserDataSb();
+  let changed = false;
+
+  // failed_tasks: 不正な値は除外する
+  const original = data.failedTasks || [];
+  const cleaned = original.filter(
+    (t) => typeof t === "string" && t.trim() && t !== "undefined"
+  );
+  if (cleaned.length !== original.length) changed = true;
+
+  // history: taskText が欠けた過去エントリは非表示にする（除外）
+  const origHist = data.history || [];
+  const history = origHist.filter(
+    (h) => typeof h.taskText === "string" && h.taskText.trim() && h.taskText !== "undefined"
+  );
+  if (history.length !== origHist.length) changed = true;
+
+  if (!changed) return; // 変化なしなら書き戻さない
+  await supabase
+    .from("user_data")
+    .update({
+      failed_tasks: cleaned,
+      history,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", uid);
 }
 
 // おみくじ結果を記録し、ポイントを加算する（1日上限の対象外）

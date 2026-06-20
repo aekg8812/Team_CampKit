@@ -14,7 +14,7 @@ import { AI_MODE } from "../lib/ai/index";
 //   onSuccess    : ({ comment, withEvidence, imageDataUrl, durationSec, rescued? })
 //   onFail       : ({ durationSec })
 //   onSpendPoints: async (amount) => void
-export default function TaskScreen({ task: initialTask, habitId, points: initialPoints, onSuccess, onFail, onSpendPoints }) {
+export default function TaskScreen({ task: initialTask, habitId, points: initialPoints, onTaskChange, onSuccess, onFail, onSpendPoints }) {
   const [task, setTask] = useState(initialTask);
   const [localPoints, setLocalPoints] = useState(initialPoints || 0);
   const penaltySeconds = getPenaltySeconds(task.penaltyLevel);
@@ -170,6 +170,7 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
       const pool = getTasksForHabit(habitId, 1);
       const newTask = pool[Math.floor(Math.random() * pool.length)];
       setTask(newTask);
+      onTaskChange?.(newTask); // App側の currentTask も更新し、失敗記録のタスク名ズレを防ぐ
       setImageData(null);
       setComment("");
       setJudgeMsg(`ラッキー！課題がLv1に変わりました`);
