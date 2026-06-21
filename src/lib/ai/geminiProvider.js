@@ -6,8 +6,9 @@
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
-// ▼ モデル名・エンドポイント。変更はここのみ
-const MODEL = "gemini-2.0-flash";
+// ▼ モデル名・エンドポイント。VITE_GEMINI_MODEL で上書き可能。
+// gemini-2.0-flash は一部キーで無料枠が0のため、既定は無料枠実績のある 1.5-flash。
+const MODEL = import.meta.env.VITE_GEMINI_MODEL || "gemini-1.5-flash";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 export const hasKey = () => !!API_KEY;
