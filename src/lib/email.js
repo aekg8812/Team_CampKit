@@ -19,8 +19,6 @@ export async function sendPenaltyEmail({ toEmail, targetName, failedTasks = [], 
     const cleanTasks = (failedTasks || []).filter(
       (t) => typeof t === "string" && t.trim() && t !== "undefined"
     );
-    // [診断ログ] 動作確認用：実際に送るタスク名を確認する（確認後に削除）
-    console.log("[email] sendPenaltyEmail payload:", { failCount, cleanTasks });
     await supabase.functions.invoke("send-penalty-email", {
       body: { toEmail, targetName, failedTasks: cleanTasks, failCount, type: 1 },
     });

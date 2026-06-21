@@ -23,6 +23,15 @@ function providerHasKey() {
   return provider().hasKey();
 }
 
+// ─── APIキーの有無 ───
+// 選択中プロバイダ（VITE_AI_PROVIDER）の hasKey() を参照する。
+// 例: gemini のときは geminiProvider.js の hasKey()（VITE_GEMINI_API_KEY）を見る。
+// 証拠写真のAI採点画面を表示するかどうかは、このフラグで決める。
+export const HAS_API_KEY = providerHasKey();
+
+// 現在のプロバイダ表示名（採点画面のラベル用）
+export const AI_PROVIDER_LABEL = PROVIDER === "gemini" ? "Gemini" : "Claude";
+
 // ─── AI モード（画面表示・デバッグ用）───
 // active: 実際に API を呼ぶ状態か
 // label : "Gemini" | "Claude" | null（モック時）
@@ -96,7 +105,8 @@ function pickDiagnosisFallback(habitId) {
  * @returns {{ ok: boolean, message: string }}
  */
 export async function judgeEvidence({ base64, mediaType, taskText }) {
-  if (!USE_API || !providerHasKey()) {
+  // APIキーが入っていれば実AI（gemini/claude）で採点、無ければモック
+  if (!providerHasKey()) {
     console.log("[AI] judgeEvidence → mock");
     // 疑似ローディング：デモでも「解析している感」を出す
     await new Promise((r) => setTimeout(r, 700 + Math.random() * 400));

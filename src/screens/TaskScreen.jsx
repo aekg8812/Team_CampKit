@@ -4,7 +4,7 @@ import { LEVEL_LABEL, getTasksForHabit } from "../data/tasksByHabit";
 import { getPenaltySeconds } from "../data/penaltyTime";
 import { REGACHA_OPTIONS, RESCUE_COST } from "../data/levelProbability";
 import { judgeEvidence } from "../lib/claude";
-import { AI_MODE } from "../lib/ai/index";
+import { HAS_API_KEY, AI_PROVIDER_LABEL } from "../lib/ai/index";
 
 export default function TaskScreen({ task: initialTask, habitId, points: initialPoints, onTaskChange, onSuccess, onFail, onSpendPoints }) {
   const [task, setTask] = useState(initialTask);
@@ -120,7 +120,8 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
     setJudgeMsg("");
     const durationSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
 
-    if (imageData) {
+    // APIキーがある時だけ写真をAI採点にかける（無い時は写真UI自体を出さない）
+    if (HAS_API_KEY && imageData) {
       setJudgePhase("analyzing");
       const thumbnail = await resizeImage(imageData.base64, imageData.mediaType, 480);
       const r = await judgeEvidence({
@@ -172,7 +173,7 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
 
   // ─── 解析中 ───
   if (judgePhase === "analyzing") {
-    const label = AI_MODE.label;
+    const label = AI_PROVIDER_LABEL;
     return (
       <div className="court-frame flex flex-col items-center justify-center gap-6 min-h-screen">
         <div className="relative w-14 h-14">
@@ -195,7 +196,7 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
       displayScore >= 80 ? "#c9a227"
       : displayScore >= 60 ? "#3dab42"
       : "#dc3535";
-    const label = AI_MODE.label;
+    const label = AI_PROVIDER_LABEL;
 
     return (
       <div className="court-frame flex flex-col items-center gap-5 py-8 text-center min-h-screen">
@@ -306,34 +307,38 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
         <p className="text-xs text-court-muted mt-2">制限時間内に達成しよう</p>
       </div>
 
-      {/* 証拠提出 */}
+      {/* 証拠提出（写真のAI採点はAPIキーがある時だけ表示） */}
       <div className="bg-court-panel rounded-3xl p-4 flex flex-col gap-3">
-        <p className="text-xs text-court-muted font-semibold uppercase tracking-widest">証拠を提出（任意）</p>
+        <p className="text-xs text-court-muted font-semibold uppercase tracking-widest">
+          {HAS_API_KEY ? "証拠を提出（任意）" : "完了コメント"}
+        </p>
 
-        {imageData ? (
-          <div className="flex flex-col items-center gap-2">
-            <img src={imageData.preview} alt="証拠" className="max-h-40 rounded-xl object-contain" />
-            <button onClick={() => setImageData(null)} className="text-xs text-court-muted underline">
-              画像を取り消す
-            </button>
-          </div>
-        ) : (
-          <label className="py-3 bg-court-panel2 rounded-xl text-center text-sm cursor-pointer border border-court-panel2 hover:border-court-gold transition-colors">
-            📷 写真を撮る / 選ぶ
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handleImage}
-              className="hidden"
-            />
-          </label>
+        {HAS_API_KEY && (
+          imageData ? (
+            <div className="flex flex-col items-center gap-2">
+              <img src={imageData.preview} alt="証拠" className="max-h-40 rounded-xl object-contain" />
+              <button onClick={() => setImageData(null)} className="text-xs text-court-muted underline">
+                画像を取り消す
+              </button>
+            </div>
+          ) : (
+            <label className="py-3 bg-court-panel2 rounded-xl text-center text-sm cursor-pointer border border-court-panel2 hover:border-court-gold transition-colors">
+              📷 写真を撮る / 選ぶ
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleImage}
+                className="hidden"
+              />
+            </label>
+          )
         )}
 
         <textarea
           className="px-3 py-2.5 bg-court-panel2 rounded-xl text-sm border border-court-panel2 outline-none focus:border-court-gold resize-none transition-colors placeholder:text-court-muted"
           rows={2}
-          placeholder="一言コメント（写真なしの場合は必須）"
+          placeholder={HAS_API_KEY ? "一言コメント（写真なしの場合は必須）" : "一言コメント（必須）"}
           value={comment}
           onChange={(e) => setComment(e.target.value)}
         />
