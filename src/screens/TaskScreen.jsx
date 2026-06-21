@@ -3,8 +3,11 @@ import { motion } from "framer-motion";
 import { LEVEL_LABEL, getTasksForHabit } from "../data/tasksByHabit";
 import { getPenaltySeconds } from "../data/penaltyTime";
 import { REGACHA_OPTIONS, RESCUE_COST } from "../data/levelProbability";
-import { judgeEvidence } from "../lib/claude";
-import { HAS_API_KEY, AI_PROVIDER_LABEL } from "../lib/ai/index";
+// 画像採点はindex.jsを経由せず、geminiProvider.jsのみを直接参照する
+import { judgeEvidence, hasKey } from "../lib/ai/geminiProvider";
+
+const HAS_API_KEY = hasKey();   // VITE_GEMINI_API_KEY の有無
+const AI_LABEL = "Gemini";      // 画像採点はGemini固定
 
 export default function TaskScreen({ task: initialTask, habitId, points: initialPoints, onTaskChange, onSuccess, onFail, onSpendPoints }) {
   const [task, setTask] = useState(initialTask);
@@ -122,14 +125,20 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
 
     if (imageData) {
       const thumbnail = await resizeImage(imageData.base64, imageData.mediaType, 480);
-      // APIキーがある時だけ写真をAI採点にかける。
+      // APIキーがある時だけ写真をGeminiでAI採点にかける（geminiProvider直接）。
       if (HAS_API_KEY) {
         setJudgePhase("analyzing");
-        const r = await judgeEvidence({
-          base64: thumbnail.split(",")[1],
-          mediaType: "image/jpeg",
-          taskText: task.text,
-        });
+        let r;
+        try {
+          r = await judgeEvidence({
+            base64: thumbnail.split(",")[1],
+            mediaType: "image/jpeg",
+            taskText: task.text,
+          });
+        } catch (e) {
+          console.warn("[gemini] judgeEvidence 失敗:", e.message);
+          r = { ok: true, score: 75, message: "判定に失敗しましたが受理しました" };
+        }
         pendingRef.current = { imageDataUrl: thumbnail, durationSec, comment };
         setJudgeResult(r);
         setJudgePhase("result");
@@ -178,7 +187,7 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
 
   // ─── 解析中 ───
   if (judgePhase === "analyzing") {
-    const label = AI_PROVIDER_LABEL;
+    const label = AI_LABEL;
     return (
       <div className="court-frame flex flex-col items-center justify-center gap-6 min-h-screen">
         <div className="relative w-14 h-14">
@@ -201,7 +210,7 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
       displayScore >= 80 ? "#c9a227"
       : displayScore >= 60 ? "#3dab42"
       : "#dc3535";
-    const label = AI_PROVIDER_LABEL;
+    const label = AI_LABEL;
 
     return (
       <div className="court-frame flex flex-col items-center gap-5 py-8 text-center min-h-screen">

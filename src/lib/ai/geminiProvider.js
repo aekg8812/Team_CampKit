@@ -41,13 +41,44 @@ export async function judgeEvidence({ base64, mediaType, taskText }) {
     },
   ];
   const raw = await callGemini(parts);
-  const clean = raw.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(clean);
+  const parsed = JSON.parse(extractJson(raw, "object"));
   return {
     ok: !!parsed.ok,
     score: typeof parsed.score === "number" ? Math.min(100, Math.max(0, Math.round(parsed.score))) : 75,
     message: parsed.message || "判定しました",
   };
+}
+
+// ───────── 後半5問の動的生成 ─────────
+// 前半5問の回答(priorQA)を踏まえ、深掘りする質問を5問作る。
+// 返り値: [{ q, options:[4] }, ...]
+export async function generateQuestions({ habitLabel, priorQA }) {
+  const parts = [
+    {
+      text:
+        `カテゴリ：「${habitLabel}」のサボり傾向チェックです。前半5問の回答は次の通り：\n\n${priorQA}\n\n` +
+        `この回答内容を踏まえて、さらに深掘りする質問を「5問」日本語で作ってください。\n` +
+        `各質問には選択肢を4つ用意し、最後の選択肢は「正直で少し笑える」ものにしてください。\n` +
+        `必ずJSON配列のみを出力。前後に説明やコードフェンスを付けない：\n` +
+        `[{"q":"質問文","options":["選択肢1","選択肢2","選択肢3","選択肢4"]}, ... 5個]`,
+    },
+  ];
+  const raw = await callGemini(parts);
+  const parsed = JSON.parse(extractJson(raw, "array"));
+  const questions = (Array.isArray(parsed) ? parsed : [])
+    .filter((x) => x && typeof x.q === "string" && Array.isArray(x.options) && x.options.length >= 2)
+    .slice(0, 5)
+    .map((x) => ({ q: x.q, options: x.options.slice(0, 4).map(String) }));
+  if (questions.length === 0) throw new Error("no valid questions");
+  return questions;
+}
+
+// AIの返答からJSON部分だけ取り出す（前後にprose/コードフェンスが混ざっても拾う）
+function extractJson(raw, kind) {
+  const cleaned = raw.replace(/```json|```/g, "").trim();
+  const re = kind === "array" ? /\[[\s\S]*\]/ : /\{[\s\S]*\}/;
+  const m = cleaned.match(re);
+  return m ? m[0] : cleaned;
 }
 
 // ───────── サボり傾向診断 ─────────
@@ -82,8 +113,7 @@ export async function generateTasks({ habitId, habitLabel, level }) {
     },
   ];
   const raw = await callGemini(parts);
-  const clean = raw.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(clean);
+  const parsed = JSON.parse(extractJson(raw, "array"));
   if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("invalid response");
   const defaultPenalty = level === 3 ? 8 : level === 2 ? 6 : 4;
   const tasks = parsed.slice(0, 3).map((item, i) => ({

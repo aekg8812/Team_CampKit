@@ -129,7 +129,8 @@ export async function judgeEvidence({ base64, mediaType, taskText }) {
  * @returns {string} 診断テキスト
  */
 export async function diagnoseAnswers({ habitId, habitLabel, questions, answers }) {
-  if (!USE_API || !providerHasKey()) {
+  // APIキーがあれば動的生成、無ければ固定フォールバック
+  if (!providerHasKey()) {
     console.log("[AI] diagnoseAnswers → mock");
     return pickDiagnosisFallback(habitId);
   }
@@ -149,7 +150,8 @@ export async function diagnoseAnswers({ habitId, habitLabel, questions, answers 
  * @returns {[{ id, text, level, penaltyLevel }]}
  */
 export async function generateTasks({ habitId, habitLabel, level, answers }) {
-  if (!USE_API || !providerHasKey()) {
+  // APIキーがあれば動的生成、無ければ固定データ
+  if (!providerHasKey()) {
     console.log("[AI] generateTasks → 固定データ");
     return getTasksForHabit(habitId, level);
   }

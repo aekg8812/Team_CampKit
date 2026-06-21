@@ -100,20 +100,21 @@ export default function App() {
   }
 
   // 質問完了 → AI診断・課題生成を並行実行 → 診断画面へ
-  async function handleQuestionComplete({ habitId, answers }) {
+  async function handleQuestionComplete({ habitId, answers, questions }) {
     setCurrentHabit(habitId);
     setDiagnosis(null);
     setTaskCandidates([]);
     setScreen(S.DIAGNOSIS);
 
     const habit = getHabit(habitId);
-    const questions = getQuestionsForHabit(habitId);
+    // QuestionScreen から渡された実際の出題（前半static＋後半動的）を診断に使う
+    const usedQuestions = questions || getQuestionsForHabit(habitId);
     const playerLevel = data?.habitStreaks?.[habitId]?.level || 1;
 
     // 激重抽選をここで行い、当選したら AI 生成をスキップ
     if (rollUltra()) {
       const [diagText] = await Promise.all([
-        diagnoseAnswers({ habitId, habitLabel: habit.label, questions, answers }),
+        diagnoseAnswers({ habitId, habitLabel: habit.label, questions: usedQuestions, answers }),
       ]);
       setDiagnosis(diagText);
       setTaskCandidates([ULTRA_TASK]);
@@ -125,7 +126,7 @@ export default function App() {
     const effectiveLevel = candidates[0]?.level || playerLevel;
 
     const [diagText, aiCandidates] = await Promise.all([
-      diagnoseAnswers({ habitId, habitLabel: habit.label, questions, answers }),
+      diagnoseAnswers({ habitId, habitLabel: habit.label, questions: usedQuestions, answers }),
       generateTasks({ habitId, habitLabel: habit.label, level: effectiveLevel, answers }),
     ]);
 
