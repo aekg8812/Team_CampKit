@@ -7,7 +7,14 @@ import { supabase } from "../lib/supabase";
 import { LEVEL_UP_THRESHOLD } from "../data/levelProbability";
 
 function toEmail(username) {
-  return `${username}@sabori-app.local`;
+  const u = (username || "").trim();
+  // 英数字と一部記号だけならそのまま使う（既存ユーザー互換）。
+  // 日本語など非ASCIIを含む場合は文字コードを16進でASCII化し、
+  // 有効なメール形式にする（Supabase Authのメール形式検証を通すため）。
+  const local = /^[a-zA-Z0-9._+-]+$/.test(u)
+    ? u.toLowerCase()
+    : "u" + Array.from(u).map((c) => c.codePointAt(0).toString(16)).join("");
+  return `${local || "user"}@sabori-app.local`;
 }
 
 function freshData() {
@@ -70,6 +77,8 @@ export async function registerSb(username, password, notifyEmail) {
   const { data, error } = await supabase.auth.signUp({
     email: toEmail(username),
     password,
+    // 表示名は元のユーザー名（日本語可）をメタデータに保持する
+    options: { data: { username } },
   });
   if (error) return { ok: false, error: sbError(error) };
 
@@ -119,6 +128,9 @@ export async function getCurrentUidSb() {
 
 export async function getCurrentUsernameSb() {
   const { data: { session } } = await supabase.auth.getSession();
+  // 登録時に保存した表示名（日本語可）を優先。無ければメールから復元（旧英数字ユーザー）。
+  const meta = session?.user?.user_metadata?.username;
+  if (meta) return meta;
   const email = session?.user?.email || "";
   return email.replace("@sabori-app.local", "") || null;
 }
