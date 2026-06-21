@@ -88,6 +88,18 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
     };
   }, [judgePhase]);
 
+  // 採点が60点以下なら、結果表示のあと強制的に撮り直し画面へ戻す
+  useEffect(() => {
+    if (judgePhase === "result" && judgeResult && typingDone) {
+      const passed = (judgeResult.score ?? 0) > 60;
+      if (!passed) {
+        const t = setTimeout(backToReupload, 2200);
+        return () => clearTimeout(t);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [judgePhase, judgeResult, typingDone]);
+
   function resetTimerForNewTask(newTask) {
     clearInterval(timerRef.current);
     const newSecs = getPenaltySeconds(newTask.penaltyLevel);
@@ -116,6 +128,14 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
       setImageData({ base64, mediaType, preview: result });
     };
     reader.readAsDataURL(file);
+  }
+
+  // 撮り直し画面へ戻す（画像と判定結果をクリア。タイマーは残り時間のまま継続）
+  function backToReupload() {
+    setImageData(null);
+    setJudgeResult(null);
+    setJudgePhase(null);
+    setJudgeMsg("60点以下でした。もう一度、証拠写真をアップロードしてください。");
   }
 
   async function handleComplete() {
@@ -211,6 +231,8 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
       : displayScore >= 60 ? "#3dab42"
       : "#dc3535";
     const label = AI_LABEL;
+    // 60点より上だけ合格。60点以下は不合格＝撮り直しへ。
+    const passed = (judgeResult.score ?? 0) > 60;
 
     return (
       <div className="court-frame flex flex-col items-center gap-5 py-8 text-center min-h-screen">
@@ -249,7 +271,7 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
             transition={{ duration: 0.3 }}
             className="w-full flex flex-col items-center gap-3"
           >
-            {judgeResult.ok ? (
+            {passed ? (
               <>
                 <p className="text-court-gold font-bold">合格！課題達成</p>
                 <motion.button
@@ -267,16 +289,13 @@ export default function TaskScreen({ task: initialTask, habitId, points: initial
               </>
             ) : (
               <>
-                <p className="text-court-danger font-bold text-sm">証拠として認められませんでした</p>
+                <p className="text-court-danger font-bold text-sm">60点以下のため不合格。撮り直してください</p>
                 <motion.button
-                  onClick={() => {
-                    setJudgePhase(null);
-                    setJudgeMsg("証拠として認められませんでした。やり直してください。");
-                  }}
+                  onClick={backToReupload}
                   whileTap={{ scale: 0.97 }}
                   className="w-full py-4 bg-court-panel border border-court-panel2 text-gray-300 font-bold rounded-3xl"
                 >
-                  やり直す
+                  もう一度アップロードする
                 </motion.button>
               </>
             )}

@@ -236,7 +236,7 @@ export async function recordResultSb({ habitId, taskText, result, comment, image
   const nowIso = new Date().toISOString();
   data.lastLogAt = nowIso;
 
-  await supabase.from("user_data").upsert({
+  const { error } = await supabase.from("user_data").upsert({
     id: uid,
     selected_habits: data.selectedHabits,
     habit_streaks: data.habitStreaks,
@@ -250,6 +250,8 @@ export async function recordResultSb({ habitId, taskText, result, comment, image
     last_log_at: nowIso,
     updated_at: nowIso,
   });
+  // 保存失敗（画像サイズ・スキーマ等）を見えるようにする
+  if (error) console.error("[supabase] recordResult 保存失敗:", error.message);
 
   return data;
 }
