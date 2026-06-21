@@ -12,19 +12,35 @@ const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODE
 
 export const hasKey = () => !!API_KEY;
 
-async function callGemini(parts) {
-  const res = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": API_KEY,
-    },
-    body: JSON.stringify({ contents: [{ parts }] }),
-  });
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") ?? "";
-  if (!text) throw new Error("Gemini: empty response");
-  return text.trim();
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Gemini呼び出し。429（レート制限）はバックオフして自動リトライする。
+async function callGemini(parts, retries = 3) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": API_KEY,
+      },
+      body: JSON.stringify({ contents: [{ parts }] }),
+    });
+
+    // レート制限：待ってから再試行（1.2s → 2.4s → 3.6s）
+    if (res.status === 429 && attempt < retries) {
+      await sleep(1200 * (attempt + 1) + Math.random() * 400);
+      continue;
+    }
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(`Gemini ${res.status}: ${data?.error?.message || "request failed"}`);
+    }
+    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") ?? "";
+    if (!text) throw new Error("Gemini: empty response");
+    return text.trim();
+  }
+  throw new Error("Gemini 429: レート制限により再試行に失敗しました");
 }
 
 // ───────── 画像の証拠判定 ─────────

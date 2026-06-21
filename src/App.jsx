@@ -125,10 +125,9 @@ export default function App() {
     const candidates = buildCandidates(habitId, playerLevel);
     const effectiveLevel = candidates[0]?.level || playerLevel;
 
-    const [diagText, aiCandidates] = await Promise.all([
-      diagnoseAnswers({ habitId, habitLabel: habit.label, questions: usedQuestions, answers }),
-      generateTasks({ habitId, habitLabel: habit.label, level: effectiveLevel, answers }),
-    ]);
+    // Geminiのレート制限(429)を避けるため、並列ではなく直列で呼ぶ
+    const diagText = await diagnoseAnswers({ habitId, habitLabel: habit.label, questions: usedQuestions, answers });
+    const aiCandidates = await generateTasks({ habitId, habitLabel: habit.label, level: effectiveLevel, answers });
 
     setDiagnosis(diagText);
     // AI生成が candidates と異なる level を持つ場合があるため、
